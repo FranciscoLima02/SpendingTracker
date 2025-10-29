@@ -105,6 +105,8 @@ Once installed through Xcode, the app runs completely offline because all assets
 
 Se quiseres apenas experimentar as automatizações e o fluxo de orçamento sem compilar o `.ipa`, tens três opções equivalentes. Todas partem do mesmo bundle web e funcionam offline graças ao IndexedDB.
 
+> 📘 **Queres um passo-a-passo rápido?** Consulta o guia [docs/local-testing.md](docs/local-testing.md) para veres todos os comandos de uma só vez, incluindo resolução de problemas frequentes no macOS.
+
 ### 1. Testar diretamente via Lovable (mais rápido)
 
 1. Abre o projeto em [Lovable](https://lovable.dev/projects/715dcac5-69b5-4f34-aa41-2bc0aaffa110).
