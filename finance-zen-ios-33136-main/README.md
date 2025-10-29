@@ -64,6 +64,62 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/715dcac5-69b5-4f34-aa41-2bc0aaffa110) and click on Share -> Publish.
 
+## How can I install the app on my iPhone?
+
+The project is now configured for [Capacitor](https://capacitorjs.com/), so you can compile a fully offline iOS binary (an `.ipa` that behaves like an `exe` for iPhone) without hosting the site on the web. You will need a Mac with Xcode installed in order to complete the build and run it on a device.
+
+1. Install Node.js and npm (only needs to be done once on your Mac):
+   - **Via Homebrew** (recomendado se já utilizas `brew`):
+     ```sh
+     brew install node
+     ```
+   - **Via nvm** (se preferires gerir várias versões de Node):
+     ```sh
+     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+     # reinicia o terminal para carregar o nvm
+     nvm install --lts
+     ```
+   - Verifica se ficou tudo pronto executando `node -v` e `npm -v`. Se não aparecerem erros estás pronto para o próximo passo.
+
+2. Instala as dependências do projeto e gera os assets web de produção:
+   ```sh
+   npm install
+   npm run build
+   ```
+   > 💡 Preferes usar [Bun](https://bun.sh/)? Ele também funciona: `bun install` seguido de `bun run build` vai produzir o mesmo resultado, e podes substituir os comandos `npm run ...` por `bun run ...`.
+
+3. Copy the production build into the native iOS container and install Capacitor's native dependencies:
+   ```sh
+   npm run cap:sync
+   ```
+   The first time you run this command it will ask to install the iOS platform; accept the prompt or run `npx cap add ios` manually.
+4. Open the generated Xcode project:
+   ```sh
+   npm run ios
+   ```
+5. In Xcode, choose your development team, plug in your iPhone (or select a simulator), then press **Run**. Xcode will build and install the app bundle directly on your device.
+
+Once installed through Xcode, the app runs completely offline because all assets are bundled inside the native container. You can still ship the PWA through the browser if you prefer the Add to Home Screen flow.
+
+## Como funciona o planeamento financeiro automático?
+
+A app já nasce com um plano mensal completo para entradas e saídas. Sempre que um novo mês é criado são registadas automaticamente as entradas fixas (salário, cartões, subsídio, extraordinários) e ficam disponíveis as metas de despesas/transferências para cada categoria:
+
+- **Entradas**: salário base, subsídio (Junho/Dezembro), saldo do cartão refeição, plafond do cartão de crédito e entradas extraordinárias.
+- **Despesas essenciais**: renda, contas (luz/água/gás) e comida.
+- **Despesas variáveis**: lazer, shit money, transporte, saúde, compras/necessidades e subscrições de trabalho/formação.
+- **Investimentos & buffer**: transferência para poupança, crypto core, crypto shit e fundo de emergência.
+
+O dashboard cruza automaticamente o plano com os movimentos registados para calcular:
+
+- Cash flow do mês (saldo inicial + entradas − saídas).
+- Percentagem do rendimento consumida em essenciais, lazer/shit money e crypto.
+- Despesas fixas vs variáveis.
+- Progresso real da poupança face à meta definida.
+- Saldos atualizados de cada “bolsa” (Conta, Cartões, Poupança, Crypto).
+
+Tudo isto funciona offline graças ao IndexedDB, por isso consegues acompanhar o orçamento mesmo sem ligação à internet.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!

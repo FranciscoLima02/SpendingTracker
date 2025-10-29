@@ -1,10 +1,25 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ArrowRight, TrendingUp, TrendingDown, ArrowDownUp } from "lucide-react";
 import { getDB, Month, Movement, Account } from "@/lib/db";
-import { calculateTargets, calculateRealTotals, formatCurrency } from "@/lib/calculations";
+import {
+  calculatePlannedIncome,
+  calculateActualIncome,
+  calculatePlannedExpenses,
+  calculateActualExpenses,
+  calculatePlannedTransfers,
+  calculateActualTransfers,
+  calculatePlannedIncomeTotal,
+  calculatePlannedOutflows,
+  calculatePlannedAvailable,
+  calculateCashFlow,
+  formatCurrency,
+  INCOME_CATEGORY_LABELS,
+  EXPENSE_CATEGORY_LABELS,
+  TRANSFER_CATEGORY_LABELS,
+  sumRecord,
+} from "@/lib/calculations";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -15,19 +30,9 @@ const categoryIcons: Record<string, any> = {
 };
 
 const categoryLabels: Record<string, string> = {
-  renda: "Renda",
-  contas: "Contas",
-  comida: "Comida",
-  lazer: "Lazer",
-  transporte: "Transporte",
-  saude: "Saúde",
-  compras: "Compras",
-  transferenciaPoupanca: "Transferência Poupança",
-  compraCryptoCore: "Crypto Core",
-  compraCryptoShit: "Crypto Shit",
-  buffer: "Buffer",
-  outrosRendimentos: "Outros Rendimentos",
-  outrosGastos: "Outros Gastos",
+  ...INCOME_CATEGORY_LABELS,
+  ...EXPENSE_CATEGORY_LABELS,
+  ...TRANSFER_CATEGORY_LABELS,
 };
 
 export default function Mes() {
@@ -66,16 +71,22 @@ export default function Mes() {
     );
   }
 
-  const targets = calculateTargets(month);
-  const reals = calculateRealTotals(movements);
+  const plannedIncome = calculatePlannedIncome(month);
+  const actualIncome = calculateActualIncome(movements);
+  const plannedExpenses = calculatePlannedExpenses(month);
+  const actualExpenses = calculateActualExpenses(movements);
+  const plannedTransfers = calculatePlannedTransfers(month);
+  const actualTransfers = calculateActualTransfers(movements);
 
-  const buckets = [
-    { name: "Core", target: targets.core, real: reals.core, color: "bg-primary" },
-    { name: "Shit", target: targets.shit, real: reals.shit, color: "bg-warning" },
-    { name: "Poupança", target: targets.savings, real: reals.savings, color: "bg-success" },
-    { name: "Lazer", target: targets.fun, real: reals.fun, color: "bg-accent" },
-    { name: "Buffer", target: targets.buffer, real: reals.buffer, color: "bg-secondary" },
-  ];
+  const summary = {
+    plannedIncomeTotal: calculatePlannedIncomeTotal(month),
+    plannedOutflows: calculatePlannedOutflows(month),
+    plannedAvailable: calculatePlannedAvailable(month),
+    actualIncomeTotal: sumRecord(actualIncome),
+    actualExpensesTotal: sumRecord(actualExpenses),
+    actualTransfersTotal: sumRecord(actualTransfers),
+    cashFlow: calculateCashFlow(month, movements),
+  };
 
   return (
     <div className="min-h-screen bg-background p-4 pb-24">
@@ -88,42 +99,113 @@ export default function Mes() {
           </p>
         </div>
 
-        {/* Budget Progress */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Progresso do Orçamento</h3>
-          <div className="space-y-4">
-            {buckets.map((bucket) => {
-              const percentage = bucket.target > 0 ? (bucket.real / bucket.target) * 100 : 0;
-              const isOverBudget = percentage > 100;
+          <h3 className="text-lg font-semibold mb-4 text-foreground">Resumo automático</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border border-primary/10 bg-primary/5 p-4">
+              <p className="text-xs text-primary uppercase tracking-wide">Rendimento</p>
+              <p className="text-2xl font-bold text-primary mt-2">
+                {formatCurrency(summary.actualIncomeTotal)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Planeado: {formatCurrency(summary.plannedIncomeTotal)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-destructive/10 bg-destructive/5 p-4">
+              <p className="text-xs text-destructive uppercase tracking-wide">Saídas (despesas + transferências)</p>
+              <p className="text-2xl font-bold text-destructive mt-2">
+                {formatCurrency(summary.actualExpensesTotal + summary.actualTransfersTotal)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Planeado: {formatCurrency(summary.plannedOutflows)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-accent/10 bg-accent/5 p-4">
+              <p className="text-xs text-accent uppercase tracking-wide">Disponível planeado</p>
+              <p className="text-2xl font-bold text-accent mt-2">
+                {formatCurrency(summary.plannedAvailable)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-success/10 bg-success/5 p-4">
+              <p className="text-xs text-success uppercase tracking-wide">Cash flow do mês</p>
+              <p className="text-2xl font-bold text-success mt-2">
+                {formatCurrency(summary.cashFlow)}
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4 text-foreground">Entradas</h3>
+          <div className="space-y-3">
+            {Object.entries(INCOME_CATEGORY_LABELS).map(([key, label]) => {
+              const planned = plannedIncome[key as keyof typeof plannedIncome] ?? 0;
+              const actual = actualIncome[key as keyof typeof actualIncome] ?? 0;
+              const progress = planned > 0 ? Math.min((actual / planned) * 100, 150) : 0;
+              const diff = actual - planned;
 
               return (
-                <div key={bucket.name} className="space-y-2">
-                  <div className="flex justify-between items-baseline">
-                    <span className="font-medium text-foreground">{bucket.name}</span>
-                    <div className="text-sm">
-                      <span className={isOverBudget ? "text-destructive font-bold" : "text-foreground"}>
-                        {formatCurrency(bucket.real)}
-                      </span>
-                      <span className="text-muted-foreground"> / {formatCurrency(bucket.target)}</span>
-                    </div>
+                <div key={key} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-foreground">{label}</span>
+                    <span className="text-muted-foreground">{formatCurrency(planned)}</span>
                   </div>
-                  <div className="relative">
-                    <Progress value={Math.min(percentage, 100)} className="h-3" />
-                    {isOverBudget && (
-                      <div className="absolute top-0 left-0 h-3 bg-destructive rounded-full opacity-30" 
-                           style={{ width: `${Math.min(percentage, 150)}%` }} />
-                    )}
+                  <Progress value={progress} className="h-2" />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Real: {formatCurrency(actual)}</span>
+                    <span>{diff >= 0 ? "+" : ""}{formatCurrency(diff)}</span>
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span className={isOverBudget ? "text-destructive font-semibold" : "text-muted-foreground"}>
-                      {percentage.toFixed(0)}%
-                    </span>
-                    {bucket.target > bucket.real && (
-                      <span className="text-success">Falta: {formatCurrency(bucket.target - bucket.real)}</span>
-                    )}
-                    {isOverBudget && (
-                      <span className="text-destructive">Excesso: {formatCurrency(bucket.real - bucket.target)}</span>
-                    )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4 text-foreground">Despesas</h3>
+          <div className="space-y-3">
+            {Object.entries(EXPENSE_CATEGORY_LABELS).map(([key, label]) => {
+              const planned = plannedExpenses[key as keyof typeof plannedExpenses] ?? 0;
+              const actual = actualExpenses[key as keyof typeof actualExpenses] ?? 0;
+              const progress = planned > 0 ? Math.min((actual / planned) * 100, 150) : 0;
+              const diff = planned - actual;
+
+              return (
+                <div key={key} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-foreground">{label}</span>
+                    <span className="text-muted-foreground">{formatCurrency(planned)}</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Real: {formatCurrency(actual)}</span>
+                    <span>{diff <= 0 ? `+${formatCurrency(Math.abs(diff))}` : `Falta ${formatCurrency(diff)}`}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4 text-foreground">Investimentos &amp; Buffer</h3>
+          <div className="space-y-3">
+            {Object.entries(TRANSFER_CATEGORY_LABELS).map(([key, label]) => {
+              const planned = plannedTransfers[key as keyof typeof plannedTransfers] ?? 0;
+              const actual = actualTransfers[key as keyof typeof actualTransfers] ?? 0;
+              const progress = planned > 0 ? Math.min((actual / planned) * 100, 150) : 0;
+              const diff = planned - actual;
+
+              return (
+                <div key={key} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-foreground">{label}</span>
+                    <span className="text-muted-foreground">{formatCurrency(planned)}</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Real: {formatCurrency(actual)}</span>
+                    <span>{diff <= 0 ? `+${formatCurrency(Math.abs(diff))}` : `Falta ${formatCurrency(diff)}`}</span>
                   </div>
                 </div>
               );

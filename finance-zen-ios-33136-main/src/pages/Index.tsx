@@ -2,16 +2,28 @@ import { useEffect, useState } from "react";
 import { Dashboard } from "@/components/Dashboard";
 import { MovementDialog } from "@/components/MovementDialog";
 import { getDB, initializeDefaultData, Month, Account, AccountBalance, Movement, AppSettings } from "@/lib/db";
-import { 
-  calculateFaltaGastar, 
-  calculateSavingsProgress, 
-  calculateIncomeTotal,
+import {
+  calculatePlannedIncome,
+  calculateActualIncome,
   calculatePlannedExpenses,
+  calculateActualExpenses,
+  calculatePlannedTransfers,
+  calculateActualTransfers,
   calculatePlannedAvailable,
-  calculateTargets,
-  calculateRealTotals
+  calculatePlannedIncomeTotal,
+  calculatePlannedOutflows,
+  calculateSavingsProgress,
+  calculateEssentialShare,
+  calculateFunShare,
+  calculateCryptoShare,
+  calculateFixedVsVariable,
+  calculateCashFlow,
+  sumRecord,
+  isSubsidyMonth,
 } from "@/lib/calculations";
 import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+import { pt } from "date-fns/locale";
 
 const Index = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -35,7 +47,28 @@ const Index = () => {
 
       // Load settings
       const loadedSettings = await db.get('settings', 'default');
-      setSettings(loadedSettings || null);
+      const safeSettings = loadedSettings
+        ? {
+            ...loadedSettings,
+            monthlyMealCardBalance: loadedSettings.monthlyMealCardBalance ?? 0,
+            monthlyCreditCardBalance: loadedSettings.monthlyCreditCardBalance ?? 0,
+            monthlyExtraordinaryIncome: loadedSettings.monthlyExtraordinaryIncome ?? 0,
+            rentPlanned: loadedSettings.rentPlanned ?? 0,
+            utilitiesPlanned: loadedSettings.utilitiesPlanned ?? 0,
+            foodPlannedMonthly: loadedSettings.foodPlannedMonthly ?? loadedSettings.foodPlanned ?? 0,
+            leisurePlanned: loadedSettings.leisurePlanned ?? 0,
+            shitMoneyPlanned: loadedSettings.shitMoneyPlanned ?? 0,
+            transportPlanned: loadedSettings.transportPlanned ?? 0,
+            healthPlanned: loadedSettings.healthPlanned ?? 0,
+            shoppingPlanned: loadedSettings.shoppingPlanned ?? 0,
+            subscriptionsPlanned: loadedSettings.subscriptionsPlanned ?? 0,
+            bufferPlanned: loadedSettings.bufferPlanned ?? 0,
+            savingsPlanned: loadedSettings.savingsPlanned ?? 0,
+            cryptoCorePlanned: loadedSettings.cryptoCorePlanned ?? 0,
+            cryptoShitPlanned: loadedSettings.cryptoShitPlanned ?? 0,
+          }
+        : null;
+      setSettings(safeSettings);
 
       // Load accounts
       const loadedAccounts = await db.getAll('accounts');
@@ -48,24 +81,40 @@ const Index = () => {
 
       let monthData = await db.getFromIndex('months', 'by-year-month', [year, month]);
       
-      if (!monthData && loadedSettings) {
+      if (!monthData && safeSettings) {
         // Create new month from settings
         monthData = {
           id: crypto.randomUUID(),
           year,
           month,
           isClosed: false,
-          incomeBase: loadedSettings.monthlyIncomeBase,
-          fixedExpenses: loadedSettings.fixedExpenses,
-          foodSeparate: loadedSettings.foodSeparate,
-          foodPlanned: loadedSettings.foodPlanned,
+          incomeBase: safeSettings.monthlyIncomeBase,
+          incomeMealCard: safeSettings.monthlyMealCardBalance,
+          incomeCreditCard: safeSettings.monthlyCreditCardBalance,
+          incomeExtraordinary: safeSettings.monthlyExtraordinaryIncome,
+          fixedExpenses: safeSettings.fixedExpenses,
+          foodSeparate: safeSettings.foodSeparate,
+          foodPlanned: safeSettings.foodPlanned,
           subsidyApplied: false,
-          subsidyAmount: loadedSettings.subsidyAmount,
-          distributionCore: loadedSettings.distributionDefaultCore,
-          distributionShit: loadedSettings.distributionDefaultShit,
-          distributionSavings: loadedSettings.distributionDefaultSavings,
-          distributionFun: loadedSettings.distributionDefaultFun,
-          distributionBuffer: loadedSettings.distributionDefaultBuffer,
+          subsidyAmount: safeSettings.subsidyAmount,
+          plannedRent: safeSettings.rentPlanned,
+          plannedUtilities: safeSettings.utilitiesPlanned,
+          plannedFood: safeSettings.foodPlannedMonthly,
+          plannedLeisure: safeSettings.leisurePlanned,
+          plannedShitMoney: safeSettings.shitMoneyPlanned,
+          plannedTransport: safeSettings.transportPlanned,
+          plannedHealth: safeSettings.healthPlanned,
+          plannedShopping: safeSettings.shoppingPlanned,
+          plannedSubscriptions: safeSettings.subscriptionsPlanned,
+          plannedBuffer: safeSettings.bufferPlanned,
+          plannedSavings: safeSettings.savingsPlanned,
+          plannedCryptoCore: safeSettings.cryptoCorePlanned,
+          plannedCryptoShit: safeSettings.cryptoShitPlanned,
+          distributionCore: safeSettings.distributionDefaultCore,
+          distributionShit: safeSettings.distributionDefaultShit,
+          distributionSavings: safeSettings.distributionDefaultSavings,
+          distributionFun: safeSettings.distributionDefaultFun,
+          distributionBuffer: safeSettings.distributionDefaultBuffer,
         };
         await db.put('months', monthData);
 
@@ -81,9 +130,125 @@ const Index = () => {
           };
           await db.put('balances', balance);
         }
+
+        const accountsByType = loadedAccounts.reduce<Record<string, string>>((acc, account) => {
+          acc[account.type] = account.id;
+          return acc;
+        }, {});
+
+        const defaultAccountId = accountsByType['current'] || loadedAccounts[0]?.id;
+        const incomeDate = new Date(year, month - 1, Math.min(safeSettings.paydayDayOfMonth || 1, 28));
+
+        const movementsToSeed: Movement[] = [];
+
+        if (safeSettings.monthlyIncomeBase > 0 && defaultAccountId) {
+          movementsToSeed.push({
+            id: crypto.randomUUID(),
+            date: incomeDate,
+            type: 'income',
+            amount: safeSettings.monthlyIncomeBase,
+            category: 'incomeSalary',
+            accountToId: defaultAccountId,
+            isSubsidyTagged: false,
+            monthYear: year,
+            monthMonth: month,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Movement);
+        }
+
+        if (safeSettings.monthlyMealCardBalance > 0 && accountsByType['mealCard']) {
+          movementsToSeed.push({
+            id: crypto.randomUUID(),
+            date: new Date(year, month - 1, 1),
+            type: 'income',
+            amount: safeSettings.monthlyMealCardBalance,
+            category: 'incomeMealCard',
+            accountToId: accountsByType['mealCard'],
+            isSubsidyTagged: false,
+            monthYear: year,
+            monthMonth: month,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Movement);
+        }
+
+        if (safeSettings.monthlyCreditCardBalance > 0 && accountsByType['creditCard']) {
+          movementsToSeed.push({
+            id: crypto.randomUUID(),
+            date: new Date(year, month - 1, 1),
+            type: 'income',
+            amount: safeSettings.monthlyCreditCardBalance,
+            category: 'incomeCreditCard',
+            accountToId: accountsByType['creditCard'],
+            isSubsidyTagged: false,
+            monthYear: year,
+            monthMonth: month,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Movement);
+        }
+
+        if (isSubsidyMonth(monthData) && safeSettings.subsidyAmount > 0 && defaultAccountId) {
+          movementsToSeed.push({
+            id: crypto.randomUUID(),
+            date: new Date(year, month - 1, 15),
+            type: 'income',
+            amount: safeSettings.subsidyAmount,
+            category: 'incomeSubsidy',
+            accountToId: defaultAccountId,
+            isSubsidyTagged: true,
+            monthYear: year,
+            monthMonth: month,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Movement);
+        }
+
+        if (safeSettings.monthlyExtraordinaryIncome > 0 && defaultAccountId) {
+          movementsToSeed.push({
+            id: crypto.randomUUID(),
+            date: new Date(year, month - 1, 20),
+            type: 'income',
+            amount: safeSettings.monthlyExtraordinaryIncome,
+            category: 'incomeExtraordinary',
+            accountToId: defaultAccountId,
+            isSubsidyTagged: false,
+            monthYear: year,
+            monthMonth: month,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Movement);
+        }
+
+        for (const movement of movementsToSeed) {
+          await db.put('movements', movement);
+        }
       }
 
-      setCurrentMonth(monthData || null);
+      const hydratedMonth = monthData
+        ? {
+            ...monthData,
+            incomeMealCard: monthData.incomeMealCard ?? 0,
+            incomeCreditCard: monthData.incomeCreditCard ?? 0,
+            incomeExtraordinary: monthData.incomeExtraordinary ?? 0,
+            plannedRent: monthData.plannedRent ?? monthData.fixedExpenses ?? 0,
+            plannedUtilities: monthData.plannedUtilities ?? 0,
+            plannedFood: monthData.plannedFood ?? monthData.foodPlanned ?? 0,
+            plannedLeisure: monthData.plannedLeisure ?? 0,
+            plannedShitMoney: monthData.plannedShitMoney ?? 0,
+            plannedTransport: monthData.plannedTransport ?? 0,
+            plannedHealth: monthData.plannedHealth ?? 0,
+            plannedShopping: monthData.plannedShopping ?? 0,
+            plannedSubscriptions: monthData.plannedSubscriptions ?? 0,
+            plannedBuffer: monthData.plannedBuffer ?? 0,
+            plannedSavings: monthData.plannedSavings ?? 0,
+            plannedCryptoCore: monthData.plannedCryptoCore ?? 0,
+            plannedCryptoShit: monthData.plannedCryptoShit ?? 0,
+          }
+        : null;
+
+      setCurrentMonth(hydratedMonth);
 
       // Load balances for current month
       const loadedBalances = await db.getAllFromIndex('balances', 'by-month', [year, month]);
@@ -111,30 +276,47 @@ const Index = () => {
     );
   }
 
-  // Calculate all dashboard metrics
-  const faltaGastar = calculateFaltaGastar(currentMonth, movements);
-  const targets = calculateTargets(currentMonth);
-  const reals = calculateRealTotals(movements);
+  const monthName = format(new Date(currentMonth.year, currentMonth.month - 1), "MMMM yyyy", { locale: pt });
+
+  const plannedIncome = calculatePlannedIncome(currentMonth);
+  const actualIncome = calculateActualIncome(movements);
+  const plannedExpenses = calculatePlannedExpenses(currentMonth);
+  const actualExpenses = calculateActualExpenses(movements);
+  const plannedTransfers = calculatePlannedTransfers(currentMonth);
+  const actualTransfers = calculateActualTransfers(movements);
   const savingsProgress = calculateSavingsProgress(currentMonth, movements);
-  
-  const totalSpending = movements
-    .filter(m => m.type === 'expense')
-    .reduce((sum, m) => sum + m.amount, 0);
+  const essentialShare = calculateEssentialShare(movements, currentMonth);
+  const funShare = calculateFunShare(movements, currentMonth);
+  const cryptoShare = calculateCryptoShare(movements, currentMonth);
+  const fixedVsVariable = calculateFixedVsVariable(movements);
+  const cashFlow = calculateCashFlow(currentMonth, movements);
 
   const dashboardBalances = accounts.map(account => {
     const balance = balances.find(b => b.accountId === account.id);
     return {
       name: account.name,
       balance: balance?.manualCurrentBalance || 0,
+      type: account.type,
     };
   });
 
-  const monthNumbers = {
-    incomeTotal: calculateIncomeTotal(currentMonth),
-    plannedExpenses: calculatePlannedExpenses(currentMonth),
+  const summary = {
+    openingBalance: (currentMonth.incomeMealCard ?? 0) + (currentMonth.incomeCreditCard ?? 0),
+    plannedIncomeTotal: calculatePlannedIncomeTotal(currentMonth),
+    plannedOutflowTotal: calculatePlannedOutflows(currentMonth),
     plannedAvailable: calculatePlannedAvailable(currentMonth),
-    totalSpending,
-    savingsReal: reals.savings,
+    actualIncomeTotal: sumRecord(actualIncome),
+    actualExpenseTotal: sumRecord(actualExpenses),
+    actualTransferTotal: sumRecord(actualTransfers),
+    cashFlow,
+    savingsPlanned: plannedTransfers.transferenciaPoupanca ?? 0,
+    savingsActual: actualTransfers.transferenciaPoupanca ?? 0,
+    savingsProgress,
+    essentialShare,
+    funShare,
+    cryptoShare,
+    fixedExpenses: fixedVsVariable.fixed,
+    variableExpenses: fixedVsVariable.variable,
   };
 
   async function handleSaveMovement(movement: Partial<Movement>) {
@@ -164,14 +346,20 @@ const Index = () => {
   return (
     <>
       <Dashboard
-        faltaGastar={faltaGastar}
-        funTarget={targets.fun}
-        savingsReal={reals.savings}
-        savingsTarget={targets.savings}
-        savingsProgress={savingsProgress}
+        monthName={monthName}
+        summary={summary}
+        incomePlan={plannedIncome}
+        incomeActual={actualIncome}
+        expensePlan={plannedExpenses}
+        expenseActual={actualExpenses}
+        transferPlan={plannedTransfers}
+        transferActual={actualTransfers}
         balances={dashboardBalances}
-        monthNumbers={monthNumbers}
         isClosed={currentMonth.isClosed}
+        onAddIncome={() => {
+          setMovementDialogType('income');
+          setMovementDialogOpen(true);
+        }}
         onAddExpense={() => {
           setMovementDialogType('expense');
           setMovementDialogOpen(true);

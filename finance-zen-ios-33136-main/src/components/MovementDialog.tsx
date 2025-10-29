@@ -23,25 +23,30 @@ interface MovementDialogProps {
 
 const categories = {
   income: [
-    { value: 'renda', label: 'Renda' },
-    { value: 'outrosRendimentos', label: 'Outros Rendimentos' },
+    { value: 'incomeSalary', label: 'Rendimento Base' },
+    { value: 'incomeSubsidy', label: 'Subsídio (Jun/Dez)' },
+    { value: 'incomeMealCard', label: 'Cartão Refeição' },
+    { value: 'incomeCreditCard', label: 'Cartão de Crédito' },
+    { value: 'incomeExtraordinary', label: 'Entrada Extraordinária' },
   ],
   expense: [
-    { value: 'contas', label: 'Contas' },
-    { value: 'comida', label: 'Comida' },
-    { value: 'lazer', label: 'Lazer' },
-    { value: 'transporte', label: 'Transporte' },
-    { value: 'saude', label: 'Saúde' },
-    { value: 'compras', label: 'Compras' },
-    { value: 'outrosGastos', label: 'Outros Gastos' },
+    { value: 'rent', label: 'Renda' },
+    { value: 'utilities', label: 'Contas (Luz, Água, Gás)' },
+    { value: 'food', label: 'Comida' },
+    { value: 'leisure', label: 'Lazer' },
+    { value: 'shitMoney', label: 'Shit Money' },
+    { value: 'transport', label: 'Transporte' },
+    { value: 'health', label: 'Saúde' },
+    { value: 'shopping', label: 'Compras / Necessidades' },
+    { value: 'subscriptions', label: 'Trabalho / Subscrições' },
   ],
   transfer: [
     { value: 'transferenciaPoupanca', label: 'Transferência Poupança' },
-    { value: 'compraCryptoCore', label: 'Compra Crypto Core' },
-    { value: 'compraCryptoShit', label: 'Compra Crypto Shit' },
-    { value: 'buffer', label: 'Buffer' },
+    { value: 'compraCryptoCore', label: 'Investimento Crypto (Core)' },
+    { value: 'compraCryptoShit', label: 'Investimento Crypto (Shit)' },
+    { value: 'buffer', label: 'Buffer / Emergência' },
   ],
-};
+} as const;
 
 export function MovementDialog({ open, onOpenChange, type, accounts, onSave }: MovementDialogProps) {
   const [date, setDate] = useState<Date>(new Date());
