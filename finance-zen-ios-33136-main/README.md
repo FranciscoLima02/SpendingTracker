@@ -108,6 +108,8 @@ Se quiseres apenas experimentar as automatizações e o fluxo de orçamento sem 
 > 📘 **Queres um passo-a-passo rápido?** Consulta o guia [docs/local-testing.md](docs/local-testing.md) para veres todos os comandos de uma só vez, incluindo resolução de problemas frequentes no macOS.
 
 > 🤖 **Preferes automatizar no Mac?** Corre `./scripts/install-deps.sh` e o script instala o Node (via Homebrew ou nvm), executa `npm install`/`bun install` e, se detetar conflitos, repete automaticamente com `--legacy-peer-deps` antes de te deixar pronto para `npm run dev`.
+>
+> 🪟 **No Windows?** Abre o PowerShell e corre `powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1`. O assistente tenta instalar o Node via `winget` (ou Chocolatey), volta a atualizar o PATH da sessão, e depois executa `npm install` com fallback automático para `--legacy-peer-deps`. Se `npm` não aparecer mas tiveres Bun instalado, ele usa `bun install` e indica que deves arrancar com `bun dev`.
 
 ### 1. Testar diretamente via Lovable (mais rápido)
 

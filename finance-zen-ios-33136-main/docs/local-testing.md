@@ -1,10 +1,10 @@
-# Guia rápido: testar o Finance Zen no teu Mac
+# Guia rápido: testar o Finance Zen no teu computador
 
 Este passo-a-passo assume que ainda não tens nada instalado. Segue a ordem e deverás ver a app a correr em poucos minutos.
 
 ## 0. Queres automatizar? (opcional)
 
-Se estiveres num Mac e preferires que tudo seja tratado automaticamente, basta correr:
+### macOS
 
 ```sh
 ./scripts/install-deps.sh
@@ -12,16 +12,28 @@ Se estiveres num Mac e preferires que tudo seja tratado automaticamente, basta c
 
 O script verifica se tens Homebrew ou nvm, instala o Node LTS (ou usa o Bun caso já o tenhas) e corre `npm install`/`bun install`. Se a primeira instalação falhar por conflitos de peer dependencies, ele tenta novamente com `npm install --legacy-peer-deps`. Se não estiveres em macOS ele avisa e podes seguir os passos manuais abaixo.
 
+### Windows
+
+Abre o PowerShell (de preferência como administrador) e executa:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1
+```
+
+O assistente tenta instalar o Node LTS via winget (com fallback para Chocolatey), atualiza o PATH da sessão e corre `npm install`. Caso `npm install` falhe por conflitos, ele repete automaticamente com `--legacy-peer-deps`. Se `npm` continuar indisponível mas detetar Bun, termina com `bun install` e indica que deves usar `bun dev` para arrancar o projeto.
+
 ## 1. Instalar Node.js (ou Bun)
 
-Escolhe uma das opções abaixo. Basta uma vez.
+Escolhe a opção que fizer mais sentido para o teu sistema operativo. Basta uma vez.
 
-### Opção A — Homebrew (mais simples)
+### macOS
+
+**Opção A — Homebrew (mais simples)**
 ```sh
 brew install node
 ```
 
-### Opção B — nvm (se queres gerir várias versões)
+**Opção B — nvm (se queres gerir várias versões)**
 ```sh
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 # fecha e volta a abrir o terminal, ou executa:
@@ -30,12 +42,33 @@ nvm install --lts
 nvm use --lts
 ```
 
-### Opção C — Bun (alternativa mais rápida)
+**Opção C — Bun (alternativa mais rápida)**
 ```sh
 curl -fsSL https://bun.sh/install | bash
 ```
 
 > 💡 Depois de instalar, confirma que tudo está disponível com `node -v` e `npm -v` (ou `bun -v`). Se algum comando não aparecer, fecha e reabre o terminal.
+
+### Windows
+
+**Opção A — winget (mais direto)**
+
+```powershell
+winget install OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements
+```
+
+**Opção B — Chocolatey (se já o usas)**
+
+```powershell
+choco install nodejs-lts -y --no-progress
+```
+
+**Opção C — nvm-windows (para gerir versões)**
+
+1. Faz download do instalador em <https://github.com/coreybutler/nvm-windows/releases>
+2. Depois de instalar, corre `nvm install lts` seguido de `nvm use lts`
+
+> 💡 Após a instalação, abre uma **nova** janela do PowerShell ou usa o script `scripts/install-deps.ps1` para forçar a atualização do PATH antes de correres `npm`.
 
 ## 2. Clonar o projeto (se ainda não tens)
 ```sh
@@ -70,6 +103,8 @@ Isso serve os ficheiros otimizados em `http://localhost:4173/`, que é a mesma v
 | Sintoma | Causa provável | Solução |
 | --- | --- | --- |
 | `zsh: command not found: npm` | Node não instalado ou sessão antiga | Instala via Brew/nvm ou reabre o terminal. Com nvm, confirma que `source ~/.zshrc` correu. |
+| `winget : The term 'winget' is not recognized` | Windows sem App Installer atualizado | Instala o App Installer pela Microsoft Store ou usa as opções Chocolatey/nvm-windows. |
+| `npm : The term 'npm' is not recognized` | PowerShell não foi reiniciado após instalar o Node | Abre uma nova janela do terminal ou corre `powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1` para atualizar o PATH. |
 | Erro ao instalar dependências nativas do Capacitor | `pod`/Xcode não configurados | Instala o Xcode completo e corre `sudo xcode-select --switch /Applications/Xcode.app`. |
 | Site abre mas está vazio | Cache antigo do IndexedDB | No browser, abre DevTools → Application → Storage e limpa o IndexedDB, ou corre `localStorage.clear()` no console. |
 
