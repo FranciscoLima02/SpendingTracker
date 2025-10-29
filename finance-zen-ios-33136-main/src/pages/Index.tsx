@@ -2,7 +2,16 @@ import { useEffect, useState } from "react";
 import { Dashboard } from "@/components/Dashboard";
 import { MovementDialog } from "@/components/MovementDialog";
 import { CardFundingDialog } from "@/components/CardFundingDialog";
-import { getDB, initializeDefaultData, Month, Account, AccountBalance, Movement, AppSettings } from "@/lib/db";
+import {
+  getDB,
+  initializeDefaultData,
+  Month,
+  Account,
+  AccountBalance,
+  Movement,
+  AppSettings,
+  createMonthWithDefaults,
+} from "@/lib/db";
 import {
   calculatePlannedIncome,
   calculateActualIncome,
@@ -20,11 +29,42 @@ import {
   calculateFixedVsVariable,
   calculateCashFlow,
   sumRecord,
-  isSubsidyMonth,
 } from "@/lib/calculations";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
+
+const normalizeMonthData = (month: Month | null): Month | null => {
+  if (!month) return null;
+
+  return {
+    ...month,
+    incomeMealCard: month.incomeMealCard ?? 0,
+    incomeCreditCard: month.incomeCreditCard ?? 0,
+    incomeExtraordinary: month.incomeExtraordinary ?? 0,
+    plannedRent: month.plannedRent ?? month.fixedExpenses ?? 0,
+    plannedUtilities: month.plannedUtilities ?? 0,
+    plannedFood: month.plannedFood ?? month.foodPlanned ?? 0,
+    plannedLeisure: month.plannedLeisure ?? 0,
+    plannedShitMoney: month.plannedShitMoney ?? 0,
+    plannedTransport: month.plannedTransport ?? 0,
+    plannedHealth: month.plannedHealth ?? 0,
+    plannedShopping: month.plannedShopping ?? 0,
+    plannedSubscriptions: month.plannedSubscriptions ?? 0,
+    plannedBuffer: month.plannedBuffer ?? 0,
+    plannedSavings: month.plannedSavings ?? 0,
+    plannedCryptoCore: month.plannedCryptoCore ?? 0,
+    plannedCryptoShit: month.plannedCryptoShit ?? 0,
+  };
+};
+
+const getNextMonth = (year: number, month: number) => {
+  if (month === 12) {
+    return { year: year + 1, month: 1 };
+  }
+
+  return { year, month: month + 1 };
+};
 
 const Index = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -82,237 +122,30 @@ const Index = () => {
       const month = now.getMonth() + 1;
 
       let monthData = await db.getFromIndex('months', 'by-year-month', [year, month]);
-      
+
       if (!monthData && safeSettings) {
-        // Create new month from settings
-        monthData = {
-          id: crypto.randomUUID(),
+        monthData = await createMonthWithDefaults({
           year,
           month,
-          isClosed: false,
-          incomeBase: safeSettings.monthlyIncomeBase,
-          incomeMealCard: safeSettings.monthlyMealCardBalance,
-          incomeCreditCard: safeSettings.monthlyCreditCardBalance,
-          incomeExtraordinary: safeSettings.monthlyExtraordinaryIncome,
-          fixedExpenses: safeSettings.fixedExpenses,
-          foodSeparate: safeSettings.foodSeparate,
-          foodPlanned: safeSettings.foodPlanned,
-          subsidyApplied: false,
-          subsidyAmount: safeSettings.subsidyAmount,
-          plannedRent: safeSettings.rentPlanned,
-          plannedUtilities: safeSettings.utilitiesPlanned,
-          plannedFood: safeSettings.foodPlannedMonthly,
-          plannedLeisure: safeSettings.leisurePlanned,
-          plannedShitMoney: safeSettings.shitMoneyPlanned,
-          plannedTransport: safeSettings.transportPlanned,
-          plannedHealth: safeSettings.healthPlanned,
-          plannedShopping: safeSettings.shoppingPlanned,
-          plannedSubscriptions: safeSettings.subscriptionsPlanned,
-          plannedBuffer: safeSettings.bufferPlanned,
-          plannedSavings: safeSettings.savingsPlanned,
-          plannedCryptoCore: safeSettings.cryptoCorePlanned,
-          plannedCryptoShit: safeSettings.cryptoShitPlanned,
-          distributionCore: safeSettings.distributionDefaultCore,
-          distributionShit: safeSettings.distributionDefaultShit,
-          distributionSavings: safeSettings.distributionDefaultSavings,
-          distributionFun: safeSettings.distributionDefaultFun,
-          distributionBuffer: safeSettings.distributionDefaultBuffer,
-        };
-        await db.put('months', monthData);
-
-        // Create initial balances
-        for (const account of loadedAccounts) {
-          const balance: AccountBalance = {
-            id: crypto.randomUUID(),
-            accountId: account.id,
-            forMonthYear: year,
-            forMonthMonth: month,
-            openingBalance: 0,
-            manualCurrentBalance: 0,
-          };
-          await db.put('balances', balance);
-        }
-
-        const accountsByType = loadedAccounts.reduce<Record<string, string>>((acc, account) => {
-          acc[account.type] = account.id;
-          return acc;
-        }, {});
-
-        const defaultAccountId = accountsByType['current'] || loadedAccounts[0]?.id;
-        const incomeDate = new Date(year, month - 1, Math.min(safeSettings.paydayDayOfMonth || 1, 28));
-
-        const movementsToSeed: Movement[] = [];
-
-        if (safeSettings.monthlyIncomeBase > 0 && defaultAccountId) {
-          movementsToSeed.push({
-            id: crypto.randomUUID(),
-            date: incomeDate,
-            type: 'income',
-            amount: safeSettings.monthlyIncomeBase,
-            category: 'incomeSalary',
-            accountToId: defaultAccountId,
-            isSubsidyTagged: false,
-            monthYear: year,
-            monthMonth: month,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } as Movement);
-        }
-
-        if (safeSettings.monthlyMealCardBalance > 0 && accountsByType['mealCard']) {
-          movementsToSeed.push({
-            id: crypto.randomUUID(),
-            date: new Date(year, month - 1, 1),
-            type: 'income',
-            amount: safeSettings.monthlyMealCardBalance,
-            category: 'incomeMealCard',
-            accountToId: accountsByType['mealCard'],
-            isSubsidyTagged: false,
-            monthYear: year,
-            monthMonth: month,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } as Movement);
-        }
-
-        if (safeSettings.monthlyCreditCardBalance > 0 && accountsByType['creditCard']) {
-          movementsToSeed.push({
-            id: crypto.randomUUID(),
-            date: new Date(year, month - 1, 1),
-            type: 'income',
-            amount: safeSettings.monthlyCreditCardBalance,
-            category: 'incomeCreditCard',
-            accountToId: accountsByType['creditCard'],
-            isSubsidyTagged: false,
-            monthYear: year,
-            monthMonth: month,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } as Movement);
-        }
-
-        const creditCardAccountId = accountsByType['creditCard'];
-        const pushExpenseFromCredit = (
-          category: 'rent' | 'shitMoney',
-          amount: number,
-          day: number,
-        ) => {
-          if (!creditCardAccountId || amount <= 0) return;
-          movementsToSeed.push({
-            id: crypto.randomUUID(),
-            date: new Date(year, month - 1, day),
-            type: 'expense',
-            amount,
-            category,
-            accountFromId: creditCardAccountId,
-            isSubsidyTagged: false,
-            monthYear: year,
-            monthMonth: month,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } as Movement);
-        };
-
-        pushExpenseFromCredit('rent', safeSettings.rentPlanned ?? 0, 2);
-        pushExpenseFromCredit('shitMoney', safeSettings.shitMoneyPlanned ?? 0, 3);
-
-        const pushTransferFromCredit = (
-          category: 'transferenciaPoupanca' | 'compraCryptoCore' | 'compraCryptoShit',
-          amount: number,
-          targetType: 'savings' | 'cryptoCore' | 'cryptoShit',
-          day: number,
-        ) => {
-          if (!creditCardAccountId || amount <= 0) return;
-          const accountToId = accountsByType[targetType];
-          if (!accountToId) return;
-
-          movementsToSeed.push({
-            id: crypto.randomUUID(),
-            date: new Date(year, month - 1, day),
-            type: 'transfer',
-            amount,
-            category,
-            accountFromId: creditCardAccountId,
-            accountToId,
-            isSubsidyTagged: false,
-            monthYear: year,
-            monthMonth: month,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } as Movement);
-        };
-
-        pushTransferFromCredit('transferenciaPoupanca', safeSettings.savingsPlanned ?? 0, 'savings', 4);
-        pushTransferFromCredit('compraCryptoCore', safeSettings.cryptoCorePlanned ?? 0, 'cryptoCore', 5);
-        pushTransferFromCredit('compraCryptoShit', safeSettings.cryptoShitPlanned ?? 0, 'cryptoShit', 6);
-
-        if (isSubsidyMonth(monthData) && safeSettings.subsidyAmount > 0 && defaultAccountId) {
-          movementsToSeed.push({
-            id: crypto.randomUUID(),
-            date: new Date(year, month - 1, 15),
-            type: 'income',
-            amount: safeSettings.subsidyAmount,
-            category: 'incomeSubsidy',
-            accountToId: defaultAccountId,
-            isSubsidyTagged: true,
-            monthYear: year,
-            monthMonth: month,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } as Movement);
-        }
-
-        if (safeSettings.monthlyExtraordinaryIncome > 0 && defaultAccountId) {
-          movementsToSeed.push({
-            id: crypto.randomUUID(),
-            date: new Date(year, month - 1, 20),
-            type: 'income',
-            amount: safeSettings.monthlyExtraordinaryIncome,
-            category: 'incomeExtraordinary',
-            accountToId: defaultAccountId,
-            isSubsidyTagged: false,
-            monthYear: year,
-            monthMonth: month,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } as Movement);
-        }
-
-        for (const movement of movementsToSeed) {
-          await db.put('movements', movement);
-        }
+          settings: safeSettings,
+          accounts: loadedAccounts,
+        });
       }
 
-      const hydratedMonth = monthData
-        ? {
-            ...monthData,
-            incomeMealCard: monthData.incomeMealCard ?? 0,
-            incomeCreditCard: monthData.incomeCreditCard ?? 0,
-            incomeExtraordinary: monthData.incomeExtraordinary ?? 0,
-            plannedRent: monthData.plannedRent ?? monthData.fixedExpenses ?? 0,
-            plannedUtilities: monthData.plannedUtilities ?? 0,
-            plannedFood: monthData.plannedFood ?? monthData.foodPlanned ?? 0,
-            plannedLeisure: monthData.plannedLeisure ?? 0,
-            plannedShitMoney: monthData.plannedShitMoney ?? 0,
-            plannedTransport: monthData.plannedTransport ?? 0,
-            plannedHealth: monthData.plannedHealth ?? 0,
-            plannedShopping: monthData.plannedShopping ?? 0,
-            plannedSubscriptions: monthData.plannedSubscriptions ?? 0,
-            plannedBuffer: monthData.plannedBuffer ?? 0,
-            plannedSavings: monthData.plannedSavings ?? 0,
-            plannedCryptoCore: monthData.plannedCryptoCore ?? 0,
-            plannedCryptoShit: monthData.plannedCryptoShit ?? 0,
-          }
-        : null;
-
+      const hydratedMonth = normalizeMonthData(monthData);
       setCurrentMonth(hydratedMonth);
 
+      if (!hydratedMonth) {
+        setIsLoading(false);
+        return;
+      }
+
       // Load balances for current month
-      const loadedBalances = await db.getAllFromIndex('balances', 'by-month', [year, month]);
+      const loadedBalances = await db.getAllFromIndex('balances', 'by-month', [hydratedMonth.year, hydratedMonth.month]);
       setBalances(loadedBalances);
 
       // Load movements for current month
-      const loadedMovements = await db.getAllFromIndex('movements', 'by-month', [year, month]);
+      const loadedMovements = await db.getAllFromIndex('movements', 'by-month', [hydratedMonth.year, hydratedMonth.month]);
       setMovements(loadedMovements);
 
       setIsLoading(false);
@@ -385,7 +218,7 @@ const Index = () => {
       } as Movement;
 
       await db.put('movements', newMovement);
-      setMovements([...movements, newMovement]);
+      setMovements((prev) => [...prev, newMovement]);
 
       toast({
         title: "Movimento adicionado",
@@ -413,6 +246,18 @@ const Index = () => {
 
       await db.put('months', updatedMonth);
       setCurrentMonth(updatedMonth);
+
+      if (settings) {
+        const updatedSettings: AppSettings = {
+          ...settings,
+          monthlyMealCardBalance: values.mealCard,
+          monthlyCreditCardBalance: values.creditCard,
+          updatedAt: new Date(),
+        };
+
+        await db.put('settings', updatedSettings);
+        setSettings(updatedSettings);
+      }
 
       const accountsByType = accounts.reduce<Record<string, string>>((acc, account) => {
         acc[account.type] = account.id;
@@ -490,6 +335,73 @@ const Index = () => {
     }
   }
 
+  async function handleCloseMonth() {
+    if (!currentMonth || !settings) return;
+
+    try {
+      const db = await getDB();
+
+      if (currentMonth.isClosed) {
+        toast({
+          title: "Mês já fechado",
+          description: "Este mês já tinha sido encerrado.",
+        });
+        return;
+      }
+
+      const closedMonth: Month = {
+        ...currentMonth,
+        isClosed: true,
+        closedAt: new Date(),
+      };
+      await db.put('months', closedMonth);
+
+      const { year: nextYear, month: nextMonthNumber } = getNextMonth(currentMonth.year, currentMonth.month);
+
+      let nextMonth = await db.getFromIndex('months', 'by-year-month', [nextYear, nextMonthNumber]);
+
+      if (!nextMonth) {
+        nextMonth = await createMonthWithDefaults({
+          year: nextYear,
+          month: nextMonthNumber,
+          settings,
+          accounts,
+          previousBalances: balances,
+          overrides: {
+            incomeBase: settings.monthlyIncomeBase ?? 0,
+            mealCard: currentMonth.incomeMealCard ?? settings.monthlyMealCardBalance ?? 0,
+            creditCard: currentMonth.incomeCreditCard ?? settings.monthlyCreditCardBalance ?? 0,
+            extraordinaryIncome: settings.monthlyExtraordinaryIncome ?? 0,
+          },
+        });
+      }
+
+      const hydratedNextMonth = normalizeMonthData(nextMonth);
+      if (!hydratedNextMonth) {
+        throw new Error('Falha ao criar o próximo mês');
+      }
+
+      const nextBalances = await db.getAllFromIndex('balances', 'by-month', [hydratedNextMonth.year, hydratedNextMonth.month]);
+      const nextMovements = await db.getAllFromIndex('movements', 'by-month', [hydratedNextMonth.year, hydratedNextMonth.month]);
+
+      setCurrentMonth(hydratedNextMonth);
+      setBalances(nextBalances);
+      setMovements(nextMovements);
+
+      toast({
+        title: "Mês fechado",
+        description: "Criámos o próximo mês com os objetivos e automatismos planeados.",
+      });
+    } catch (error) {
+      console.error('Failed to close month', error);
+      toast({
+        title: "Erro ao fechar mês",
+        description: "Não foi possível fechar o mês. Tenta novamente.",
+        variant: "destructive",
+      });
+    }
+  }
+
   return (
     <>
       <Dashboard
@@ -516,12 +428,7 @@ const Index = () => {
           setMovementDialogOpen(true);
         }}
         onManageCardFunding={() => setCardFundingDialogOpen(true)}
-        onCloseMonth={() => {
-          toast({
-            title: "Fechar mês",
-            description: "Funcionalidade em desenvolvimento",
-          });
-        }}
+        onCloseMonth={handleCloseMonth}
       />
       
       <MovementDialog

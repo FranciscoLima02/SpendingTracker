@@ -191,6 +191,8 @@ O dashboard cruza automaticamente o plano com os movimentos registados para calc
 
 Tudo isto funciona offline graças ao IndexedDB, por isso consegues acompanhar o orçamento mesmo sem ligação à internet.
 
+Quando deres o mês por concluído, utiliza o botão **Fechar mês** no dashboard. A app marca o período como encerrado, cria automaticamente o mês seguinte com as mesmas metas (ajustadas aos valores reais que registaste nos cartões) e transporta os saldos das contas para poderes continuar o planeamento sem perder histórico.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!
