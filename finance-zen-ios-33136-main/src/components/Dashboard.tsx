@@ -46,6 +46,7 @@ interface DashboardProps {
   onAddIncome: () => void;
   onAddExpense: () => void;
   onAddTransfer: () => void;
+  onManageCardFunding: () => void;
   onCloseMonth: () => void;
 }
 
@@ -120,6 +121,7 @@ export function Dashboard({
   onAddIncome,
   onAddExpense,
   onAddTransfer,
+  onManageCardFunding,
   onCloseMonth,
 }: DashboardProps) {
   const cashFlowIsPositive = summary.cashFlow >= 0;
@@ -292,7 +294,13 @@ export function Dashboard({
         </Card>
 
         {!isClosed && (
-          <div className="grid md:grid-cols-4 gap-3">
+          <div className="grid md:grid-cols-5 gap-3">
+            <Button
+              onClick={onManageCardFunding}
+              className="w-full h-14 bg-primary text-primary-foreground font-semibold shadow-md"
+            >
+              Atualizar cartões
+            </Button>
             <Button
               onClick={onAddIncome}
               className="w-full h-14 bg-success text-success-foreground font-semibold shadow-md"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Dashboard } from "@/components/Dashboard";
 import { MovementDialog } from "@/components/MovementDialog";
+import { CardFundingDialog } from "@/components/CardFundingDialog";
 import { getDB, initializeDefaultData, Month, Account, AccountBalance, Movement, AppSettings } from "@/lib/db";
 import {
   calculatePlannedIncome,
@@ -34,6 +35,7 @@ const Index = () => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [movementDialogOpen, setMovementDialogOpen] = useState(false);
   const [movementDialogType, setMovementDialogType] = useState<'expense' | 'transfer' | 'income'>('expense');
+  const [cardFundingDialogOpen, setCardFundingDialogOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -189,6 +191,61 @@ const Index = () => {
           } as Movement);
         }
 
+        const creditCardAccountId = accountsByType['creditCard'];
+        const pushExpenseFromCredit = (
+          category: 'rent' | 'shitMoney',
+          amount: number,
+          day: number,
+        ) => {
+          if (!creditCardAccountId || amount <= 0) return;
+          movementsToSeed.push({
+            id: crypto.randomUUID(),
+            date: new Date(year, month - 1, day),
+            type: 'expense',
+            amount,
+            category,
+            accountFromId: creditCardAccountId,
+            isSubsidyTagged: false,
+            monthYear: year,
+            monthMonth: month,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Movement);
+        };
+
+        pushExpenseFromCredit('rent', safeSettings.rentPlanned ?? 0, 2);
+        pushExpenseFromCredit('shitMoney', safeSettings.shitMoneyPlanned ?? 0, 3);
+
+        const pushTransferFromCredit = (
+          category: 'transferenciaPoupanca' | 'compraCryptoCore' | 'compraCryptoShit',
+          amount: number,
+          targetType: 'savings' | 'cryptoCore' | 'cryptoShit',
+          day: number,
+        ) => {
+          if (!creditCardAccountId || amount <= 0) return;
+          const accountToId = accountsByType[targetType];
+          if (!accountToId) return;
+
+          movementsToSeed.push({
+            id: crypto.randomUUID(),
+            date: new Date(year, month - 1, day),
+            type: 'transfer',
+            amount,
+            category,
+            accountFromId: creditCardAccountId,
+            accountToId,
+            isSubsidyTagged: false,
+            monthYear: year,
+            monthMonth: month,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Movement);
+        };
+
+        pushTransferFromCredit('transferenciaPoupanca', safeSettings.savingsPlanned ?? 0, 'savings', 4);
+        pushTransferFromCredit('compraCryptoCore', safeSettings.cryptoCorePlanned ?? 0, 'cryptoCore', 5);
+        pushTransferFromCredit('compraCryptoShit', safeSettings.cryptoShitPlanned ?? 0, 'cryptoShit', 6);
+
         if (isSubsidyMonth(monthData) && safeSettings.subsidyAmount > 0 && defaultAccountId) {
           movementsToSeed.push({
             id: crypto.randomUUID(),
@@ -343,6 +400,96 @@ const Index = () => {
     }
   }
 
+  async function handleSaveCardFunding(values: { mealCard: number; creditCard: number }) {
+    if (!currentMonth) return;
+
+    try {
+      const db = await getDB();
+      const updatedMonth: Month = {
+        ...currentMonth,
+        incomeMealCard: values.mealCard,
+        incomeCreditCard: values.creditCard,
+      };
+
+      await db.put('months', updatedMonth);
+      setCurrentMonth(updatedMonth);
+
+      const accountsByType = accounts.reduce<Record<string, string>>((acc, account) => {
+        acc[account.type] = account.id;
+        return acc;
+      }, {} as Record<string, string>);
+
+      const cardIncomeDate = new Date(updatedMonth.year, updatedMonth.month - 1, 1);
+
+      const upsertIncomeMovement = async (
+        category: 'incomeMealCard' | 'incomeCreditCard',
+        amount: number,
+        accountToId?: string,
+      ) => {
+        const existing = movements.find(
+          movement =>
+            movement.type === 'income' &&
+            movement.category === category &&
+            movement.monthYear === updatedMonth.year &&
+            movement.monthMonth === updatedMonth.month,
+        );
+
+        if (!accountToId) {
+          if (existing) {
+            await db.delete('movements', existing.id);
+          }
+          return;
+        }
+
+        if (amount > 0) {
+          if (existing) {
+            await db.put('movements', {
+              ...existing,
+              amount,
+              accountToId,
+              date: existing.date ?? cardIncomeDate,
+              updatedAt: new Date(),
+            });
+          } else {
+            const newMovement: Movement = {
+              id: crypto.randomUUID(),
+              date: cardIncomeDate,
+              type: 'income',
+              amount,
+              category,
+              accountToId,
+              isSubsidyTagged: false,
+              monthYear: updatedMonth.year,
+              monthMonth: updatedMonth.month,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            await db.put('movements', newMovement);
+          }
+        } else if (existing) {
+          await db.delete('movements', existing.id);
+        }
+      };
+
+      await upsertIncomeMovement('incomeMealCard', values.mealCard, accountsByType['mealCard']);
+      await upsertIncomeMovement('incomeCreditCard', values.creditCard, accountsByType['creditCard']);
+
+      const refreshedMovements = await db.getAllFromIndex('movements', 'by-month', [updatedMonth.year, updatedMonth.month]);
+      setMovements(refreshedMovements);
+
+      toast({
+        title: "Cartões atualizados",
+        description: "Os valores foram registados para este mês.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar os cartões.",
+        variant: "destructive",
+      });
+    }
+  }
+
   return (
     <>
       <Dashboard
@@ -368,6 +515,7 @@ const Index = () => {
           setMovementDialogType('transfer');
           setMovementDialogOpen(true);
         }}
+        onManageCardFunding={() => setCardFundingDialogOpen(true)}
         onCloseMonth={() => {
           toast({
             title: "Fechar mês",
@@ -382,6 +530,14 @@ const Index = () => {
         type={movementDialogType}
         accounts={accounts}
         onSave={handleSaveMovement}
+      />
+
+      <CardFundingDialog
+        open={cardFundingDialogOpen}
+        onOpenChange={setCardFundingDialogOpen}
+        defaultMealAmount={currentMonth.incomeMealCard ?? 0}
+        defaultCreditAmount={currentMonth.incomeCreditCard ?? 0}
+        onSave={handleSaveCardFunding}
       />
     </>
   );
