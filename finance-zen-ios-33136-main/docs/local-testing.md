@@ -2,6 +2,16 @@
 
 Este passo-a-passo assume que ainda não tens nada instalado. Segue a ordem e deverás ver a app a correr em poucos minutos.
 
+## 0. Queres automatizar? (opcional)
+
+Se estiveres num Mac e preferires que tudo seja tratado automaticamente, basta correr:
+
+```sh
+./scripts/install-deps.sh
+```
+
+O script verifica se tens Homebrew ou nvm, instala o Node LTS (ou usa o Bun caso já o tenhas) e corre `npm install`/`bun install`. Se não estiveres em macOS ele avisa e podes seguir os passos manuais abaixo.
+
 ## 1. Instalar Node.js (ou Bun)
 
 Escolhe uma das opções abaixo. Basta uma vez.
