@@ -101,6 +101,39 @@ The project is now configured for [Capacitor](https://capacitorjs.com/), so you 
 
 Once installed through Xcode, the app runs completely offline because all assets are bundled inside the native container. You can still ship the PWA through the browser if you prefer the Add to Home Screen flow.
 
+## Como posso testar a aplicação?
+
+Se quiseres apenas experimentar as automatizações e o fluxo de orçamento sem compilar o `.ipa`, tens três opções equivalentes. Todas partem do mesmo bundle web e funcionam offline graças ao IndexedDB.
+
+### 1. Testar diretamente via Lovable (mais rápido)
+
+1. Abre o projeto em [Lovable](https://lovable.dev/projects/715dcac5-69b5-4f34-aa41-2bc0aaffa110).
+2. Clica em **Share → Publish** para gerar um URL HTTPS temporário.
+3. Abre esse link no teu iPhone (Safari) ou no desktop. Podes adicionar à tela inicial para simular um app instalado.
+
+### 2. Correr localmente no Mac (modo desenvolvimento)
+
+1. Garante que instalaste o Node/npm (ver secção anterior) ou, em alternativa, usa Bun.
+2. No terminal, executa:
+   ```sh
+   npm install
+   npm run dev
+   ```
+   > Com Bun substitui por `bun install` e `bun dev`.
+3. O Vite mostra um endereço `http://localhost:5173/`. Se quiseres abrir no iPhone, certifica-te de que ambos estão na mesma rede e usa o IP local do Mac (ex.: `http://192.168.1.23:5173`).
+
+### 3. Testar o build de produção sem Xcode
+
+1. Gera o bundle final:
+   ```sh
+   npm run build
+   npm run preview
+   ```
+   O comando `npm run preview` serve os ficheiros otimizados em `http://localhost:4173/`.
+2. Tal como no modo dev, podes abrir esse endereço no desktop ou no iPhone (via IP da rede local). O comportamento é idêntico ao `.ipa`, apenas sem a camada nativa.
+
+> 💡 Depois de experimentares e confirmares que tudo funciona como esperado, podes seguir a secção "How can I install the app on my iPhone?" para gerar a versão nativa com Capacitor/Xcode.
+
 ## Como funciona o planeamento financeiro automático?
 
 A app já nasce com um plano mensal completo para entradas e saídas. Sempre que um novo mês é criado são registadas automaticamente as entradas fixas (salário, cartões, subsídio, extraordinários) e ficam disponíveis as metas de despesas/transferências para cada categoria:
