@@ -78,14 +78,22 @@ cd "$PROJECT_ROOT"
 
 echo "➡️  A instalar dependências do projeto com $PACKAGE_MANAGER..."
 if [[ "$PACKAGE_MANAGER" == "npm" ]]; then
-  npm install
+  if npm install; then
+    INSTALL_NOTE="npm run dev"
+  else
+    echo "⚠️  'npm install' falhou. A tentar novamente com '--legacy-peer-deps'..."
+    if npm install --legacy-peer-deps; then
+      echo "ℹ️  Utilizámos '--legacy-peer-deps' para ultrapassar conflitos de peer dependencies."
+      INSTALL_NOTE="npm run dev"
+    else
+      echo "❌ Não foi possível concluir 'npm install'. Consulta os logs acima para mais detalhes."
+      exit 1
+    fi
+  fi
 else
   bun install
+  INSTALL_NOTE="bun dev"
 fi
 
 echo
-if [[ "$PACKAGE_MANAGER" == "npm" ]]; then
-  echo "🎉 Tudo pronto! Agora podes correr 'npm run dev' para testar localmente."
-else
-  echo "🎉 Tudo pronto! Agora podes correr 'bun dev' para testar localmente."
-fi
+echo "🎉 Tudo pronto! Agora podes correr '$INSTALL_NOTE' para testar localmente."

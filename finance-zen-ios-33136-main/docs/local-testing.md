@@ -10,7 +10,7 @@ Se estiveres num Mac e preferires que tudo seja tratado automaticamente, basta c
 ./scripts/install-deps.sh
 ```
 
-O script verifica se tens Homebrew ou nvm, instala o Node LTS (ou usa o Bun caso já o tenhas) e corre `npm install`/`bun install`. Se não estiveres em macOS ele avisa e podes seguir os passos manuais abaixo.
+O script verifica se tens Homebrew ou nvm, instala o Node LTS (ou usa o Bun caso já o tenhas) e corre `npm install`/`bun install`. Se a primeira instalação falhar por conflitos de peer dependencies, ele tenta novamente com `npm install --legacy-peer-deps`. Se não estiveres em macOS ele avisa e podes seguir os passos manuais abaixo.
 
 ## 1. Instalar Node.js (ou Bun)
 
@@ -52,6 +52,8 @@ npm run dev
 ```
 
 > Usando Bun? Substitui por `bun install` e `bun dev`.
+
+> Se o `npm install` acusar conflitos de peer dependencies, repete com `npm install --legacy-peer-deps`. O script automático já faz este passo por ti.
 
 O Vite vai mostrar um endereço `http://localhost:5173/`. Abre esse link no navegador do Mac. Se quiseres testar no iPhone, certifica-te de que ambos estão na mesma rede e usa o IP local do Mac (ex.: `http://192.168.1.23:5173`).
 

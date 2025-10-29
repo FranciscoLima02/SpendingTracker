@@ -107,7 +107,7 @@ Se quiseres apenas experimentar as automatizações e o fluxo de orçamento sem 
 
 > 📘 **Queres um passo-a-passo rápido?** Consulta o guia [docs/local-testing.md](docs/local-testing.md) para veres todos os comandos de uma só vez, incluindo resolução de problemas frequentes no macOS.
 
-> 🤖 **Preferes automatizar no Mac?** Corre `./scripts/install-deps.sh` e o script instala o Node (via Homebrew ou nvm), executa `npm install`/`bun install` e deixa o projeto pronto para `npm run dev`.
+> 🤖 **Preferes automatizar no Mac?** Corre `./scripts/install-deps.sh` e o script instala o Node (via Homebrew ou nvm), executa `npm install`/`bun install` e, se detetar conflitos, repete automaticamente com `--legacy-peer-deps` antes de te deixar pronto para `npm run dev`.
 
 ### 1. Testar diretamente via Lovable (mais rápido)
 
