@@ -113,14 +113,48 @@ Se quiseres apenas experimentar as automatizações e o fluxo de orçamento sem 
 
 ### 2. Correr localmente no Mac (modo desenvolvimento)
 
-1. Garante que instalaste o Node/npm (ver secção anterior) ou, em alternativa, usa Bun.
-2. No terminal, executa:
-   ```sh
-   npm install
-   npm run dev
-   ```
-   > Com Bun substitui por `bun install` e `bun dev`.
-3. O Vite mostra um endereço `http://localhost:5173/`. Se quiseres abrir no iPhone, certifica-te de que ambos estão na mesma rede e usa o IP local do Mac (ex.: `http://192.168.1.23:5173`).
+> ⚠️ Se o terminal mostrar `zsh: command not found: npm`, significa que o Node.js ainda não está instalado ou não foi carregado na sessão atual. Segue uma das opções abaixo e **fecha/reabre** o terminal antes de continuar.
+
+**Opção A — instalar Node rapidamente com Homebrew**
+
+```sh
+brew install node
+```
+
+**Opção B — usar nvm para gerir versões (ideal a longo prazo)**
+
+```sh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+# reabre o terminal ou executa `source ~/.zshrc`
+nvm install --lts
+nvm use --lts
+```
+
+**Opção C — preferes Bun?**
+
+```sh
+curl -fsSL https://bun.sh/install | bash
+```
+
+Depois de qualquer opção, confirma que as ferramentas estão disponíveis:
+
+```sh
+node -v
+npm -v      # se usares Bun, confirma com `bun -v`
+```
+
+Agora sim, dentro da pasta do projeto corre:
+
+```sh
+npm install
+npm run dev
+```
+
+> Com Bun substitui por `bun install` e `bun dev`.
+
+Se estiveres a usar nvm e o terminal continuar a queixar-se de `npm`, garante que o ficheiro `~/.zshrc` tem as linhas de inicialização adicionadas pelo instalador (reinicia o terminal ou corre `source ~/.zshrc`).
+
+Quando o Vite arrancar, mostra um endereço `http://localhost:5173/`. Se quiseres abrir no iPhone, certifica-te de que ambos estão na mesma rede e usa o IP local do Mac (ex.: `http://192.168.1.23:5173`).
 
 ### 3. Testar o build de produção sem Xcode
 
