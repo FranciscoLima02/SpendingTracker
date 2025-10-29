@@ -64,6 +64,15 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/715dcac5-69b5-4f34-aa41-2bc0aaffa110) and click on Share -> Publish.
 
+## How can I install the app on my iPhone?
+
+This project now ships as a Progressive Web App (PWA), so you can install it directly on iOS without publishing to the App Store. Follow these steps:
+
+1. Build and serve the production app locally with `npm install` and `npm run build && npm run preview`, or deploy it to any HTTPS host.
+2. Open the deployed URL in Safari on your iPhone.
+3. Tap the **Share** button and choose **Add to Home Screen**.
+4. Confirm the shortcut name and tap **Add**. The Finance Zen icon will now appear on your home screen and launch in full-screen mode like a native app, even when offline.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!
