@@ -187,12 +187,8 @@ export async function getDB(): Promise<IDBPDatabase<FinanceDB>> {
 // Initialize default data
 export async function initializeDefaultData() {
   const db = await getDB();
-  
-  // Check if settings exist
-  const existingSettings = await db.get('settings', 'default');
-  if (existingSettings) return;
 
-  // Create default settings
+  // Default blueprint used to backfill missing settings fields
   const rentPlanned = 200;
   const utilitiesPlanned = 75;
   const subscriptionsPlanned = 35;
@@ -223,74 +219,75 @@ export async function initializeDefaultData() {
     cryptoCorePlanned: 100,
     cryptoShitPlanned: 50,
     distributionDefaultCore: 0.25,
-    distributionDefaultShit: 0.10,
+    distributionDefaultShit: 0.1,
     distributionDefaultSavings: 0.25,
     distributionDefaultFun: 0.25,
     distributionDefaultBuffer: 0.15,
     distributionSubsidySavings: 0.35,
-    distributionSubsidyCore: 0.30,
-    distributionSubsidyShit: 0.10,
+    distributionSubsidyCore: 0.3,
+    distributionSubsidyShit: 0.1,
     distributionSubsidyFun: 0.25,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
-  await db.put('settings', defaultSettings);
+  const existingSettings = await db.get('settings', 'default');
 
-  // Create default accounts
-  const defaultAccounts: Account[] = [
-    {
-      id: crypto.randomUUID(),
-      type: 'current',
-      name: 'Conta',
-      isActive: true,
-      createdAt: new Date(),
+  if (!existingSettings) {
+    await db.put('settings', defaultSettings);
+  } else {
+    const patchedSettings: AppSettings = {
+      ...existingSettings,
+      createdAt: existingSettings.createdAt ? new Date(existingSettings.createdAt) : new Date(),
       updatedAt: new Date(),
-    },
-    {
-      id: crypto.randomUUID(),
-      type: 'mealCard',
-      name: 'Cartão Refeição',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: crypto.randomUUID(),
-      type: 'creditCard',
-      name: 'Cartão Crédito',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: crypto.randomUUID(),
-      type: 'savings',
-      name: 'Poupança',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: crypto.randomUUID(),
-      type: 'cryptoCore',
-      name: 'Crypto Core',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: crypto.randomUUID(),
-      type: 'cryptoShit',
-      name: 'Crypto Shit',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
+    } as AppSettings;
+
+    let needsUpdate = false;
+    (Object.keys(defaultSettings) as (keyof AppSettings)[]).forEach((key) => {
+      if (patchedSettings[key] === undefined || patchedSettings[key] === null) {
+        patchedSettings[key] = defaultSettings[key];
+        needsUpdate = true;
+      }
+    });
+
+    if (!needsUpdate) {
+      // keep original updatedAt when nothing changed
+      patchedSettings.updatedAt = existingSettings.updatedAt
+        ? new Date(existingSettings.updatedAt)
+        : patchedSettings.updatedAt;
+    }
+
+    if (needsUpdate) {
+      await db.put('settings', patchedSettings);
+    }
+  }
+
+  const existingAccounts = await db.getAll('accounts');
+  const requiredAccounts: Array<Pick<Account, 'type' | 'name'>> = [
+    { type: 'current', name: 'Conta' },
+    { type: 'mealCard', name: 'Cartão Refeição' },
+    { type: 'creditCard', name: 'Cartão Crédito' },
+    { type: 'savings', name: 'Poupança' },
+    { type: 'cryptoCore', name: 'Crypto Core' },
+    { type: 'cryptoShit', name: 'Crypto Shit' },
   ];
 
-  for (const account of defaultAccounts) {
-    await db.put('accounts', account);
+  const existingTypes = new Set(existingAccounts.map((account) => account.type));
+  const missingAccounts = requiredAccounts.filter((definition) => !existingTypes.has(definition.type));
+
+  if (missingAccounts.length > 0) {
+    for (const definition of missingAccounts) {
+      const account: Account = {
+        id: crypto.randomUUID(),
+        type: definition.type,
+        name: definition.name,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await db.put('accounts', account);
+    }
   }
 }
 
