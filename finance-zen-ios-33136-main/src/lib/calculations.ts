@@ -100,6 +100,21 @@ const ZERO_SUBSIDY_TARGETS = {
 
 const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
+export const EMPTY_MONTH_DISTRIBUTION: MonthDistributionTargets = {
+  totalIncome: 0,
+  incomeBase: 0,
+  incomeMealCard: 0,
+  incomeExtraordinary: 0,
+  incomeSubsidy: 0,
+  availableCash: 0,
+  baseAvailable: 0,
+  baseTargets: { ...ZERO_TARGETS },
+  subsidyTargets: { ...ZERO_SUBSIDY_TARGETS },
+  combinedTargets: { ...ZERO_TARGETS },
+  mealCardBudget: 0,
+  subsidyApplied: false,
+};
+
 export interface MonthDistributionTargets {
   totalIncome: number;
   incomeBase: number;
@@ -236,6 +251,39 @@ export interface MonthBucketSummary {
   crypto: CryptoBucketSnapshot;
   buffer: BudgetBucketSnapshot;
 }
+
+export const EMPTY_BUCKET_SUMMARY: MonthBucketSummary = {
+  account: {
+    opening: 0,
+    inflow: 0,
+    outflow: 0,
+    current: 0,
+    plan: 0,
+    remainingPlan: 0,
+  },
+  mealCard: {
+    opening: 0,
+    inflow: 0,
+    outflow: 0,
+    current: 0,
+    plan: 0,
+    remainingPlan: 0,
+    foodSpent: 0,
+  },
+  leisure: { plan: 0, actual: 0, remaining: 0 },
+  shitMoney: { plan: 0, actual: 0, remaining: 0 },
+  savings: { plan: 0, actual: 0, remaining: 0 },
+  crypto: {
+    plan: 0,
+    actual: 0,
+    remaining: 0,
+    corePlan: 0,
+    shitPlan: 0,
+    coreActual: 0,
+    shitActual: 0,
+  },
+  buffer: { plan: 0, actual: 0, remaining: 0 },
+};
 
 const sumMovements = (movements: Movement[], predicate: (movement: Movement) => boolean) => {
   return roundCurrency(

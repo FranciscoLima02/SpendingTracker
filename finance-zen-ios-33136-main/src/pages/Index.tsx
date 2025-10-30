@@ -33,6 +33,8 @@ import {
   calculateMonthDistribution,
   buildMonthBuckets,
   generateSavingsSuggestions,
+  EMPTY_MONTH_DISTRIBUTION,
+  EMPTY_BUCKET_SUMMARY,
 } from "@/lib/calculations";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -165,6 +167,22 @@ const Index = () => {
     }
   }
 
+  const distribution = useMemo(
+    () => (currentMonth ? calculateMonthDistribution(currentMonth) : EMPTY_MONTH_DISTRIBUTION),
+    [currentMonth],
+  );
+  const bucketSummary = useMemo(
+    () =>
+      currentMonth
+        ? buildMonthBuckets(currentMonth, movements, accounts, balances)
+        : EMPTY_BUCKET_SUMMARY,
+    [currentMonth, movements, accounts, balances],
+  );
+  const suggestions = useMemo(
+    () => (currentMonth ? generateSavingsSuggestions(currentMonth, bucketSummary) : []),
+    [currentMonth, bucketSummary],
+  );
+
   if (isLoading || !currentMonth || !settings) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -209,16 +227,6 @@ const Index = () => {
     fixedExpenses: fixedVsVariable.fixed,
     variableExpenses: fixedVsVariable.variable,
   };
-
-  const distribution = useMemo(() => calculateMonthDistribution(currentMonth), [currentMonth]);
-  const bucketSummary = useMemo(
-    () => buildMonthBuckets(currentMonth, movements, accounts, balances),
-    [currentMonth, movements, accounts, balances],
-  );
-  const suggestions = useMemo(
-    () => generateSavingsSuggestions(currentMonth, bucketSummary),
-    [currentMonth, bucketSummary],
-  );
 
   async function handleSaveMovement(movement: Partial<Movement>) {
     try {
