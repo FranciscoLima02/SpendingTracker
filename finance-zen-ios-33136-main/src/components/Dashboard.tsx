@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, CreditCard, Target } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, CreditCard, Target, Sparkles, PlusCircle } from "lucide-react";
 import { formatCurrency, MonthDistributionTargets, MonthBucketSummary, SavingsSuggestion } from "@/lib/calculations";
 
 interface SummaryMetrics {
@@ -32,6 +32,10 @@ interface DashboardProps {
   onAddTransfer: () => void;
   onManageCardFunding: () => void;
   onCloseMonth: () => void;
+  onRecordPayday: () => void;
+  onCreateNextMonth: () => void;
+  paydayLoading: boolean;
+  creatingNextMonth: boolean;
   distribution: MonthDistributionTargets;
   bucketSummary: MonthBucketSummary;
   suggestions: SavingsSuggestion[];
@@ -46,6 +50,10 @@ export function Dashboard({
   onAddTransfer,
   onManageCardFunding,
   onCloseMonth,
+  onRecordPayday,
+  onCreateNextMonth,
+  paydayLoading,
+  creatingNextMonth,
   distribution,
   bucketSummary,
   suggestions,
@@ -75,6 +83,27 @@ export function Dashboard({
             </div>
           )}
         </header>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onRecordPayday}
+            disabled={isClosed || paydayLoading}
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            {paydayLoading ? 'A lançar entradas…' : 'Recebi o mês'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCreateNextMonth}
+            disabled={creatingNextMonth}
+          >
+            <PlusCircle className="mr-2 h-4 w-4" />
+            {creatingNextMonth ? 'A duplicar…' : 'Novo mês'}
+          </Button>
+        </div>
 
         <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4 text-foreground">Resumo mensal automático</h2>

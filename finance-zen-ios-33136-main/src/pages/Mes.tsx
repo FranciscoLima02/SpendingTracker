@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
   ArrowRight,
+  CalendarDays,
   TrendingUp,
   TrendingDown,
   ArrowDownUp,
@@ -10,6 +11,12 @@ import {
   Lock,
   Unlock,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  Plus,
+  CreditCard,
+  MoreVertical,
 } from "lucide-react";
 import {
   getDB,
@@ -19,6 +26,7 @@ import {
   AppSettings,
   createMonthWithDefaults,
   initializeDefaultData,
+  AccountBalance,
 } from "@/lib/db";
 import {
   applyDistributionToMonth,
@@ -40,16 +48,24 @@ import {
   calculateMonthDistribution,
   isSubsidyMonth,
   EMPTY_MONTH_DISTRIBUTION,
+  buildMonthBuckets,
+  EMPTY_BUCKET_SUMMARY,
+  generateSavingsSuggestions,
 } from "@/lib/calculations";
 import { normalizeMonth, getNextMonth } from "@/lib/month-helpers";
+import { generateId } from "@/lib/id";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
+import { MovementDialog, type MovementDialogDefaults } from "@/components/MovementDialog";
+import { CardFundingDialog } from "@/components/CardFundingDialog";
 
 const categoryIcons: Record<string, any> = {
   income: TrendingUp,
@@ -69,6 +85,7 @@ export default function Mes() {
   const [month, setMonth] = useState<Month | null>(null);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [balances, setBalances] = useState<AccountBalance[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [formValues, setFormValues] = useState({
     incomeBase: "0.00",
@@ -83,6 +100,35 @@ export default function Mes() {
   const [isCreatingMonth, setIsCreatingMonth] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const [isDeletingMonth, setIsDeletingMonth] = useState(false);
+  const [isRecordingPayday, setIsRecordingPayday] = useState(false);
+  const [movementDialogOpen, setMovementDialogOpen] = useState(false);
+  const [movementDialogType, setMovementDialogType] = useState<'expense' | 'transfer' | 'income'>('expense');
+  const [movementDialogDefaults, setMovementDialogDefaults] = useState<MovementDialogDefaults | undefined>(undefined);
+  const [cardFundingDialogOpen, setCardFundingDialogOpen] = useState(false);
+  const [movementFilter, setMovementFilter] = useState<string>('all');
+  const [quickAmount, setQuickAmount] = useState('');
+  const [quickCategory, setQuickCategory] = useState('');
+  const [quickAccount, setQuickAccount] = useState('');
+  const [isQuickSaving, setIsQuickSaving] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(0);
+  const [isWizardSubmitting, setIsWizardSubmitting] = useState(false);
+  const [wizardValues, setWizardValues] = useState({
+    incomeBase: 0,
+    mealCard: 0,
+    incomeExtra: 0,
+    fixedExpenses: 0,
+    foodExpenses: 0,
+    creditCard: 0,
+    overrides: {
+      savings: 0,
+      cryptoCore: 0,
+      cryptoShit: 0,
+      leisure: 0,
+      shitMoney: 0,
+      buffer: 0,
+    },
+  });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -119,6 +165,7 @@ export default function Mes() {
       const normalizedSettings = loadedSettings ?? null;
       setSettings(normalizedSettings);
       setAccounts(allAccounts);
+      setBalances([]);
 
       const allMonths = rawMonths.map((record) => normalizeMonth(record));
       const sortedMonths = sortMonthsDesc(allMonths);
@@ -134,6 +181,7 @@ export default function Mes() {
         setSelectedMonthId(null);
         setMonth(null);
         setMovements([]);
+        setBalances([]);
       }
     } catch (error) {
       console.error('Falha ao carregar os meses', error);
@@ -157,13 +205,15 @@ export default function Mes() {
       }
 
       const normalized = normalizeMonth(storedMonth);
-      const [monthMovements] = await Promise.all([
+      const [monthMovements, monthBalances] = await Promise.all([
         db.getAllFromIndex('movements', 'by-month', [normalized.year, normalized.month]),
+        db.getAllFromIndex('balances', 'by-month', [normalized.year, normalized.month]),
       ]);
 
       setSelectedMonthId(normalized.id);
       setMonth(normalized);
       setMovements(monthMovements);
+      setBalances(monthBalances);
     } finally {
       setIsHydratingMonth(false);
     }
@@ -186,7 +236,30 @@ export default function Mes() {
       fixedExpenses: formatNumber(month.actualFixedExpenses ?? month.fixedExpenses),
       foodExpenses: formatNumber(month.actualFoodExpenses ?? month.plannedFood ?? month.foodPlanned),
     });
+
+    setWizardValues({
+      incomeBase: month.incomeBase ?? 0,
+      mealCard: month.incomeMealCard ?? 0,
+      incomeExtra: month.subsidyApplied ? month.subsidyAmount ?? 0 : month.incomeExtraordinary ?? 0,
+      fixedExpenses: month.actualFixedExpenses ?? month.fixedExpenses ?? 0,
+      foodExpenses: month.actualFoodExpenses ?? month.plannedFood ?? month.foodPlanned ?? 0,
+      creditCard: month.incomeCreditCard ?? 0,
+      overrides: {
+        savings: month.plannedSavings ?? 0,
+        cryptoCore: month.plannedCryptoCore ?? 0,
+        cryptoShit: month.plannedCryptoShit ?? 0,
+        leisure: month.plannedLeisure ?? 0,
+        shitMoney: month.plannedShitMoney ?? 0,
+        buffer: month.plannedBuffer ?? 0,
+      },
+    });
   }, [month]);
+
+  useEffect(() => {
+    if (!quickAccount && accounts.length > 0) {
+      setQuickAccount(accounts[0].id);
+    }
+  }, [accounts, quickAccount]);
 
   const handleInputChange = (field: keyof typeof formValues) =>
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -202,7 +275,90 @@ export default function Mes() {
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
-  async function handleSaveInputs() {
+  type MonthInputPayload = {
+    incomeBase: number;
+    mealCard: number;
+    incomeExtra: number;
+    fixedExpenses: number;
+    foodExpenses: number;
+    creditCard?: number;
+  };
+
+  type PlanOverrides = {
+    savings?: number;
+    cryptoCore?: number;
+    cryptoShit?: number;
+    leisure?: number;
+    shitMoney?: number;
+    buffer?: number;
+  };
+
+  const roundTwo = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+  function calculateMonthFromInputs(values: MonthInputPayload, overrides?: PlanOverrides) {
+    if (!month) return null;
+
+    const monthDraft: Month = {
+      ...month,
+      incomeBase: roundTwo(values.incomeBase),
+      incomeMealCard: roundTwo(values.mealCard),
+      incomeExtraordinary: roundTwo(values.incomeExtra),
+      actualFixedExpenses: roundTwo(values.fixedExpenses),
+      actualFoodExpenses: roundTwo(values.foodExpenses),
+      incomeCreditCard: values.creditCard != null ? roundTwo(values.creditCard) : month.incomeCreditCard,
+      lastInputsUpdatedAt: new Date(),
+    };
+
+    if (isSubsidyMonth(monthDraft) && values.incomeExtra > 0) {
+      monthDraft.subsidyApplied = true;
+      monthDraft.subsidyAmount = roundTwo(values.incomeExtra);
+      monthDraft.incomeExtraordinary = 0;
+    } else {
+      monthDraft.subsidyApplied = false;
+      monthDraft.subsidyAmount = 0;
+    }
+
+    let recalculated = applyDistributionToMonth(monthDraft);
+
+    if (overrides) {
+      const baseValues = {
+        savings: overrides.savings ?? recalculated.plannedSavings ?? 0,
+        cryptoCore: overrides.cryptoCore ?? recalculated.plannedCryptoCore ?? 0,
+        shitMoney: overrides.shitMoney ?? recalculated.plannedShitMoney ?? 0,
+        leisure: overrides.leisure ?? recalculated.plannedLeisure ?? 0,
+        buffer: overrides.buffer ?? recalculated.plannedBuffer ?? 0,
+      };
+
+      recalculated = {
+        ...recalculated,
+        plannedSavings: roundTwo(baseValues.savings),
+        plannedCryptoCore: roundTwo(baseValues.cryptoCore),
+        plannedShitMoney: roundTwo(baseValues.shitMoney),
+        plannedLeisure: roundTwo(baseValues.leisure),
+        plannedBuffer: roundTwo(baseValues.buffer),
+        plannedCryptoShit: overrides.cryptoShit != null ? roundTwo(overrides.cryptoShit) : recalculated.plannedCryptoShit,
+      };
+
+      const baseTotal = Object.values(baseValues).reduce((total, value) => total + value, 0);
+      if (baseTotal > 0) {
+        recalculated = {
+          ...recalculated,
+          distributionSavings: baseValues.savings / baseTotal,
+          distributionCore: baseValues.cryptoCore / baseTotal,
+          distributionShit: baseValues.shitMoney / baseTotal,
+          distributionFun: baseValues.leisure / baseTotal,
+          distributionBuffer: baseValues.buffer / baseTotal,
+        };
+      }
+    }
+
+    return normalizeMonth(recalculated);
+  }
+
+  async function persistMonthInputs(
+    values: MonthInputPayload,
+    options?: { planOverrides?: PlanOverrides; successMessage?: { title: string; description?: string } },
+  ) {
     if (!month) return;
     if (month.isClosed) {
       toast({
@@ -213,118 +369,117 @@ export default function Mes() {
       return;
     }
 
-    try {
-      setIsSavingInputs(true);
-      const db = await getDB();
+    const db = await getDB();
+    const normalizedMonth = calculateMonthFromInputs(values, options?.planOverrides);
+    if (!normalizedMonth) return;
+    await db.put('months', normalizedMonth);
 
-      const incomeBase = parseInputValue(formValues.incomeBase);
-      const mealCard = parseInputValue(formValues.mealCard);
-      const incomeExtra = parseInputValue(formValues.incomeExtra);
-      const fixedReal = parseInputValue(formValues.fixedExpenses);
-      const foodReal = parseInputValue(formValues.foodExpenses);
+    const accountMap = accounts.reduce<Record<string, string>>((acc, account) => {
+      acc[account.type] = account.id;
+      return acc;
+    }, {});
 
-      const monthDraft: Month = {
-        ...month,
-        incomeBase,
-        incomeMealCard: mealCard,
-        incomeExtraordinary: incomeExtra,
-        actualFixedExpenses: fixedReal,
-        actualFoodExpenses: foodReal,
-      };
+    const monthKey: [number, number] = [normalizedMonth.year, normalizedMonth.month];
+    let monthMovements = await db.getAllFromIndex('movements', 'by-month', monthKey);
 
-      if (isSubsidyMonth(month) && incomeExtra > 0) {
-        monthDraft.subsidyApplied = true;
-        monthDraft.subsidyAmount = incomeExtra;
-        monthDraft.incomeExtraordinary = 0;
-      } else {
-        monthDraft.subsidyApplied = false;
-        monthDraft.subsidyAmount = 0;
-      }
+    const upsertIncome = async (
+      category:
+        | 'incomeSalary'
+        | 'incomeMealCard'
+        | 'incomeExtraordinary'
+        | 'incomeSubsidy'
+        | 'incomeCreditCard',
+      amount: number,
+      accountToId?: string,
+    ) => {
+      const existingIndex = monthMovements.findIndex(
+        (movement) => movement.type === 'income' && movement.category === category,
+      );
+      const existing = existingIndex >= 0 ? monthMovements[existingIndex] : undefined;
 
-      const recalculated = applyDistributionToMonth(monthDraft);
-      const normalizedMonth = normalizeMonth(recalculated);
-      await db.put('months', normalizedMonth);
-
-      const accountMap = accounts.reduce<Record<string, string>>((acc, account) => {
-        acc[account.type] = account.id;
-        return acc;
-      }, {});
-
-      const monthKey: [number, number] = [recalculated.year, recalculated.month];
-      let monthMovements = await db.getAllFromIndex('movements', 'by-month', monthKey);
-
-      const upsertIncome = async (
-        category: 'incomeSalary' | 'incomeMealCard' | 'incomeExtraordinary' | 'incomeSubsidy',
-        amount: number,
-        accountToId?: string,
-      ) => {
-        const existingIndex = monthMovements.findIndex(
-          (movement) => movement.type === 'income' && movement.category === category,
-        );
-        const existing = existingIndex >= 0 ? monthMovements[existingIndex] : undefined;
-
-        if (!accountToId) {
-          if (existing) {
-            await db.delete('movements', existing.id);
-            monthMovements.splice(existingIndex, 1);
-          }
-          return;
-        }
-
-        if (amount > 0) {
-          const defaultDate = existing?.date ?? new Date(recalculated.year, recalculated.month - 1, 1);
-          if (existing) {
-            const updated = {
-              ...existing,
-              amount,
-              accountToId,
-              date: defaultDate,
-              updatedAt: new Date(),
-            };
-            await db.put('movements', updated);
-            monthMovements[existingIndex] = updated;
-          } else {
-            const newMovement: Movement = {
-              id: crypto.randomUUID(),
-              date: defaultDate,
-              type: 'income',
-              amount,
-              category,
-              accountToId,
-              isSubsidyTagged: category === 'incomeSubsidy',
-              monthYear: recalculated.year,
-              monthMonth: recalculated.month,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-            await db.put('movements', newMovement);
-            monthMovements.push(newMovement);
-          }
-        } else if (existing) {
+      if (!accountToId) {
+        if (existing) {
           await db.delete('movements', existing.id);
           monthMovements.splice(existingIndex, 1);
         }
-      };
-
-      await upsertIncome('incomeSalary', incomeBase, accountMap['current']);
-      await upsertIncome('incomeMealCard', mealCard, accountMap['mealCard']);
-
-      if (recalculated.subsidyApplied) {
-        await upsertIncome('incomeSubsidy', recalculated.subsidyAmount ?? 0, accountMap['current']);
-        await upsertIncome('incomeExtraordinary', 0, accountMap['current']);
-      } else {
-        await upsertIncome('incomeExtraordinary', recalculated.incomeExtraordinary ?? 0, accountMap['current']);
-        await upsertIncome('incomeSubsidy', 0, accountMap['current']);
+        return;
       }
 
-      const refreshedMovements = await db.getAllFromIndex('movements', 'by-month', monthKey);
-      setMonth(normalizedMonth);
-      upsertMonthInState(normalizedMonth);
-      setMovements(refreshedMovements);
+      if (amount > 0) {
+        const defaultDate = existing?.date ?? new Date(normalizedMonth.year, normalizedMonth.month - 1, 1);
+        if (existing) {
+          const updated = {
+            ...existing,
+            amount: roundTwo(amount),
+            accountToId,
+            date: defaultDate,
+            updatedAt: new Date(),
+          };
+          await db.put('movements', updated);
+          monthMovements[existingIndex] = updated;
+        } else {
+          const newMovement: Movement = {
+            id: generateId(),
+            date: defaultDate,
+            type: 'income',
+            amount: roundTwo(amount),
+            category,
+            accountToId,
+            isSubsidyTagged: category === 'incomeSubsidy',
+            monthYear: normalizedMonth.year,
+            monthMonth: normalizedMonth.month,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          await db.put('movements', newMovement);
+          monthMovements.push(newMovement);
+        }
+      } else if (existing) {
+        await db.delete('movements', existing.id);
+        monthMovements.splice(existingIndex, 1);
+      }
+    };
 
-      toast({
+    await upsertIncome('incomeSalary', normalizedMonth.incomeBase ?? 0, accountMap['current']);
+    await upsertIncome('incomeMealCard', normalizedMonth.incomeMealCard ?? 0, accountMap['mealCard']);
+
+    if (normalizedMonth.subsidyApplied) {
+      await upsertIncome('incomeSubsidy', normalizedMonth.subsidyAmount ?? 0, accountMap['current']);
+      await upsertIncome('incomeExtraordinary', 0, accountMap['current']);
+    } else {
+      await upsertIncome('incomeExtraordinary', normalizedMonth.incomeExtraordinary ?? 0, accountMap['current']);
+      await upsertIncome('incomeSubsidy', 0, accountMap['current']);
+    }
+
+    await upsertIncome('incomeCreditCard', normalizedMonth.incomeCreditCard ?? 0, accountMap['creditCard']);
+
+    const [refreshedMovements, refreshedBalances] = await Promise.all([
+      db.getAllFromIndex('movements', 'by-month', monthKey),
+      db.getAllFromIndex('balances', 'by-month', monthKey),
+    ]);
+
+    setMonth(normalizedMonth);
+    upsertMonthInState(normalizedMonth);
+    setMovements(refreshedMovements);
+    setBalances(refreshedBalances);
+
+    toast(
+      options?.successMessage ?? {
         title: 'Entradas do mês atualizadas',
         description: 'Recalculámos as metas e saldos automaticamente.',
+      },
+    );
+  }
+
+  async function handleSaveInputs() {
+    try {
+      setIsSavingInputs(true);
+      await persistMonthInputs({
+        incomeBase: parseInputValue(formValues.incomeBase),
+        mealCard: parseInputValue(formValues.mealCard),
+        incomeExtra: parseInputValue(formValues.incomeExtra),
+        fixedExpenses: parseInputValue(formValues.fixedExpenses),
+        foodExpenses: parseInputValue(formValues.foodExpenses),
       });
     } catch (error) {
       console.error(error);
@@ -335,6 +490,203 @@ export default function Mes() {
       });
     } finally {
       setIsSavingInputs(false);
+    }
+  }
+
+  async function handleRecordPayday() {
+    if (!settings || !month) {
+      toast({
+        title: 'Configuração em falta',
+        description: 'Define primeiro os valores mensais nas definições.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsRecordingPayday(true);
+      await persistMonthInputs(
+        {
+          incomeBase: settings.monthlyIncomeBase ?? month.incomeBase ?? 0,
+          mealCard: settings.monthlyMealCardBalance ?? month.incomeMealCard ?? 0,
+          incomeExtra: settings.monthlyExtraordinaryIncome ?? month.incomeExtraordinary ?? 0,
+          fixedExpenses: month.actualFixedExpenses ?? month.fixedExpenses ?? settings.fixedExpenses ?? 0,
+          foodExpenses: month.actualFoodExpenses ?? month.plannedFood ?? settings.foodPlannedMonthly ?? 0,
+          creditCard: settings.monthlyCreditCardBalance ?? month.incomeCreditCard ?? 0,
+        },
+        {
+          successMessage: {
+            title: 'Payday registado',
+            description: 'Criámos as entradas planeadas e atualizámos as metas das bolsas.',
+          },
+        },
+      );
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: 'Erro ao registar payday',
+        description: 'Não foi possível lançar as entradas automáticas. Tenta novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRecordingPayday(false);
+    }
+  }
+
+  async function handleQuickExpenseSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!month) return;
+    if (month.isClosed) {
+      toast({
+        title: 'Mês fechado',
+        description: 'Reabre o mês para adicionares novos movimentos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const amount = parseFloat(quickAmount.replace(',', '.'));
+    if (!quickCategory || !quickAccount || !Number.isFinite(amount) || amount <= 0) {
+      toast({
+        title: 'Dados em falta',
+        description: 'Preenche o valor, a categoria e a conta antes de gravar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsQuickSaving(true);
+      const db = await getDB();
+      const newMovement: Movement = {
+        id: generateId(),
+        date: new Date(),
+        type: 'expense',
+        amount: roundTwo(amount),
+        category: quickCategory,
+        accountFromId: quickAccount,
+        isSubsidyTagged: false,
+        monthYear: month.year,
+        monthMonth: month.month,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await db.put('movements', newMovement);
+      const refreshedBalances = await db.getAllFromIndex('balances', 'by-month', [month.year, month.month]);
+
+      setMovements((prev) => [...prev, newMovement]);
+      setBalances(refreshedBalances);
+      setQuickAmount('');
+      toast({
+        title: 'Despesa registada',
+        description: 'Adicionámos o movimento à lista deste mês.',
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: 'Erro ao adicionar movimento',
+        description: 'Não foi possível registar a despesa rápida.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsQuickSaving(false);
+    }
+  }
+
+  const handleMonthStep = async (direction: 'prev' | 'next') => {
+    if (!month) return;
+    const currentIndex = months.findIndex((item) => item.id === month.id);
+    if (currentIndex === -1) return;
+
+    const delta = direction === 'prev' ? 1 : -1;
+    const target = months[currentIndex + delta];
+    if (target) {
+      await handleMonthChange(target.id);
+    }
+  };
+
+  const openMovementDialogWithDefaults = (
+    type: 'expense' | 'income' | 'transfer',
+    defaults?: MovementDialogDefaults,
+  ) => {
+    setMovementDialogType(type);
+    setMovementDialogDefaults(defaults);
+    setMovementDialogOpen(true);
+  };
+
+  const openWizard = () => {
+    if (isLocked) {
+      toast({
+        title: 'Mês fechado',
+        description: 'Reabre o mês para ajustares o plano.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setWizardStep(0);
+    setIsWizardOpen(true);
+  };
+
+  async function handleMovementDialogSave(movement: Partial<Movement>) {
+    if (!month) return;
+    try {
+      const db = await getDB();
+      const newMovement: Movement = {
+        id: generateId(),
+        ...movement,
+      } as Movement;
+      await db.put('movements', newMovement);
+      const refreshedBalances = await db.getAllFromIndex('balances', 'by-month', [month.year, month.month]);
+      setMovements((prev) => [...prev, newMovement]);
+      setBalances(refreshedBalances);
+      toast({
+        title: 'Movimento registado',
+        description: 'Atualizámos o saldo das bolsas.',
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: 'Erro ao guardar movimento',
+        description: 'Tenta novamente dentro de instantes.',
+        variant: 'destructive',
+      });
+    }
+  }
+
+  const handleWizardNext = () => setWizardStep((step) => Math.min(step + 1, 3));
+  const handleWizardPrevious = () => setWizardStep((step) => Math.max(step - 1, 0));
+
+  async function handleWizardApply() {
+    try {
+      setIsWizardSubmitting(true);
+      await persistMonthInputs(
+        {
+          incomeBase: wizardValues.incomeBase,
+          mealCard: wizardValues.mealCard,
+          incomeExtra: wizardValues.incomeExtra,
+          fixedExpenses: wizardValues.fixedExpenses,
+          foodExpenses: wizardValues.foodExpenses,
+          creditCard: wizardValues.creditCard,
+        },
+        {
+          planOverrides: wizardValues.overrides,
+          successMessage: {
+            title: 'Plano do mês preparado',
+            description: 'Aplicámos as tuas entradas e metas personalizadas.',
+          },
+        },
+      );
+      setIsWizardOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: 'Erro ao preparar mês',
+        description: 'Revê os valores e tenta novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsWizardSubmitting(false);
     }
   }
 
@@ -593,6 +945,7 @@ export default function Mes() {
         setSelectedMonthId(null);
         setMonth(null);
         setMovements([]);
+        setBalances([]);
       }
 
       toast({
@@ -615,6 +968,189 @@ export default function Mes() {
     () => (month ? calculateMonthDistribution(month) : EMPTY_MONTH_DISTRIBUTION),
     [month],
   );
+
+  const bucketSummary = useMemo(
+    () =>
+      month
+        ? buildMonthBuckets(month, movements, accounts, balances)
+        : EMPTY_BUCKET_SUMMARY,
+    [month, movements, accounts, balances],
+  );
+
+  const suggestions = useMemo(
+    () => (month ? generateSavingsSuggestions(month, bucketSummary) : []),
+    [month, bucketSummary],
+  );
+
+  const accountTypeMap = useMemo(() => {
+    return accounts.reduce<Partial<Record<Account['type'], string>>>((acc, account) => {
+      acc[account.type] = account.id;
+      return acc;
+    }, {});
+  }, [accounts]);
+
+  const quickExpenseOptions = useMemo(
+    () =>
+      Object.entries(EXPENSE_CATEGORY_LABELS).map(([value, label]) => ({
+        value,
+        label,
+      })),
+    [],
+  );
+
+  const movementFilterOptions = useMemo(
+    () =>
+      [
+        { value: 'all', label: 'Todas as categorias' },
+        ...Object.entries(categoryLabels).map(([value, label]) => ({
+          value,
+          label,
+        })),
+      ],
+    [],
+  );
+
+  const accountOptions = useMemo(
+    () =>
+      accounts
+        .filter((account) => !['savings', 'cryptoCore', 'cryptoShit'].includes(account.type))
+        .map((account) => ({
+          value: account.id,
+          label: account.name,
+        })),
+    [accounts],
+  );
+
+  const filteredMovements = useMemo(() => {
+    const sorted = [...movements].sort((a, b) => b.date.getTime() - a.date.getTime());
+    if (movementFilter === 'all') {
+      return sorted;
+    }
+    return sorted.filter((movement) => movement.category === movementFilter);
+  }, [movements, movementFilter]);
+
+  const recentMovements = useMemo(() => filteredMovements.slice(0, 10), [filteredMovements]);
+
+  const wizardPreview = useMemo(() => {
+    if (!month) return null;
+    return calculateMonthFromInputs(
+      {
+        incomeBase: wizardValues.incomeBase,
+        mealCard: wizardValues.mealCard,
+        incomeExtra: wizardValues.incomeExtra,
+        fixedExpenses: wizardValues.fixedExpenses,
+        foodExpenses: wizardValues.foodExpenses,
+        creditCard: wizardValues.creditCard,
+      },
+      wizardValues.overrides,
+    );
+  }, [month, wizardValues]);
+
+  const wizardPreviewDistribution = useMemo(
+    () => (wizardPreview ? calculateMonthDistribution(wizardPreview) : null),
+    [wizardPreview],
+  );
+
+  const isLocked = month?.isClosed ?? false;
+  const selectedIndex = month ? months.findIndex((item) => item.id === month.id) : -1;
+  const hasPrevious = selectedIndex >= 0 && selectedIndex < months.length - 1;
+  const hasNext = selectedIndex > 0;
+
+  const bucketCards = month
+    ? [
+        {
+          id: 'account',
+          title: 'Conta',
+          plan: bucketSummary.account.plan,
+          actual: bucketSummary.account.outflow,
+          remaining: bucketSummary.account.remainingPlan,
+          subtitle: 'Saldo disponível na conta corrente',
+          action: {
+            type: 'expense' as const,
+            defaults: {
+              accountFromId: accountTypeMap.current,
+            } satisfies MovementDialogDefaults,
+          },
+        },
+        {
+          id: 'mealCard',
+          title: 'Refeição',
+          plan: bucketSummary.mealCard.plan,
+          actual: bucketSummary.mealCard.foodSpent,
+          remaining: bucketSummary.mealCard.remainingPlan,
+          subtitle: 'Cartão refeição para comida do mês',
+          action: {
+            type: 'expense' as const,
+            defaults: {
+              category: 'food',
+              accountFromId: accountTypeMap.mealCard,
+            } as MovementDialogDefaults,
+          },
+        },
+        {
+          id: 'leisure',
+          title: 'Lazer',
+          plan: bucketSummary.leisure.plan,
+          actual: bucketSummary.leisure.actual,
+          remaining: bucketSummary.leisure.remaining,
+          subtitle: 'Cafés, saídas e experiências',
+          action: {
+            type: 'expense' as const,
+            defaults: {
+              category: 'leisure',
+              accountFromId: accountTypeMap.current,
+            } as MovementDialogDefaults,
+          },
+        },
+        {
+          id: 'shitMoney',
+          title: 'Shit Money',
+          plan: bucketSummary.shitMoney.plan,
+          actual: bucketSummary.shitMoney.actual,
+          remaining: bucketSummary.shitMoney.remaining,
+          subtitle: 'Investimento arriscado ou impulsivo',
+          action: {
+            type: 'expense' as const,
+            defaults: {
+              category: 'shitMoney',
+              accountFromId: accountTypeMap.creditCard ?? accountTypeMap.current,
+            } as MovementDialogDefaults,
+          },
+        },
+        {
+          id: 'savings',
+          title: 'Poupança',
+          plan: bucketSummary.savings.plan,
+          actual: bucketSummary.savings.actual,
+          remaining: bucketSummary.savings.remaining,
+          subtitle: 'Transferências para o cofre mensal',
+          action: {
+            type: 'transfer' as const,
+            defaults: {
+              category: 'transferenciaPoupanca',
+              accountFromId: accountTypeMap.current,
+              accountToId: accountTypeMap.savings,
+            } as MovementDialogDefaults,
+          },
+        },
+        {
+          id: 'crypto',
+          title: 'Crypto',
+          plan: bucketSummary.crypto.plan,
+          actual: bucketSummary.crypto.actual,
+          remaining: bucketSummary.crypto.remaining,
+          subtitle: 'Core + Shit investidos este mês',
+          action: {
+            type: 'transfer' as const,
+            defaults: {
+              category: 'compraCryptoCore',
+              accountFromId: accountTypeMap.current,
+              accountToId: accountTypeMap.cryptoCore ?? accountTypeMap.cryptoShit,
+            } as MovementDialogDefaults,
+          },
+        },
+      ]
+    : [];
 
   if ((isLoading || isHydratingMonth) && !month) {
     return (
@@ -643,423 +1179,751 @@ export default function Mes() {
     );
   }
 
-  const isLocked = month.isClosed;
+  
   const monthName = format(new Date(month.year, month.month - 1), "MMMM yyyy", { locale: pt });
-  const monthNameFormatted = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+  const monthLabel = monthName.charAt(0).toUpperCase() + monthName.slice(1);
   const plannedIncome = calculatePlannedIncome(month);
   const actualIncome = calculateActualIncome(movements);
-  const plannedExpenses = calculatePlannedExpenses(month);
-  const actualExpenses = calculateActualExpenses(movements);
-  const plannedTransfers = calculatePlannedTransfers(month);
-  const actualTransfers = calculateActualTransfers(movements);
-
   const summary = {
     plannedIncomeTotal: calculatePlannedIncomeTotal(month),
     plannedOutflows: calculatePlannedOutflows(month),
     plannedAvailable: calculatePlannedAvailable(month),
     actualIncomeTotal: sumRecord(actualIncome),
-    actualExpensesTotal: sumRecord(actualExpenses),
-    actualTransfersTotal: sumRecord(actualTransfers),
+    actualExpensesTotal: sumRecord(calculateActualExpenses(movements)),
+    actualTransfersTotal: sumRecord(calculateActualTransfers(movements)),
     cashFlow: calculateCashFlow(month, movements),
   };
 
-  return (
-    <div className="min-h-screen bg-background p-4 pb-24">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-3">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Gestão de meses</h1>
-              <p className="text-muted-foreground">Seleciona um mês para rever entradas, objetivos e ajustes.</p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Select value={selectedMonthId ?? month.id} onValueChange={handleMonthChange}>
-                <SelectTrigger className="w-72">
-                  <SelectValue placeholder="Escolhe um mês" />
-                </SelectTrigger>
-                <SelectContent>
-                  {months.map((item) => {
-                    const label = format(new Date(item.year, item.month - 1), "MMMM yyyy", { locale: pt });
-                    return (
-                      <SelectItem key={item.id} value={item.id}>
-                        {label.charAt(0).toUpperCase() + label.slice(1)} {item.isClosed ? '· Fechado' : ''}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              <Badge variant={isLocked ? 'outline' : 'secondary'} className="w-fit">
-                {isLocked ? 'Fechado' : 'Aberto'}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">{monthNameFormatted}</p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button onClick={handleCreateNextMonth} disabled={isCreatingMonth} className="w-full sm:w-auto">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              {isCreatingMonth ? 'A criar…' : 'Criar próximo mês'}
-            </Button>
-            <Button
-              onClick={isLocked ? handleReopenMonth : handleCloseCurrentMonth}
-              disabled={isTogglingStatus}
-              variant="outline"
-              className="w-full sm:w-auto"
-            >
-              {isLocked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
-              {isTogglingStatus ? 'A processar…' : isLocked ? 'Reabrir mês' : 'Fechar mês'}
-            </Button>
-            <Button
-              onClick={handleDeleteMonth}
-              disabled={isDeletingMonth}
-              variant="destructive"
-              className="w-full sm:w-auto"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              {isDeletingMonth ? 'A apagar…' : 'Apagar mês'}
-            </Button>
-          </div>
-        </div>
+  const actualOutflows = summary.actualExpensesTotal + summary.actualTransfersTotal;
 
-        {isLocked && (
-          <Card className="border-dashed border-primary/40 bg-primary/5 p-4">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="font-medium text-primary">Este mês está fechado.</p>
-                <p className="text-sm text-primary/80">
-                  Reabre-o para editares valores ou regista novos movimentos no dashboard.
-                </p>
+  return (
+    <>
+      <div className="min-h-screen bg-background pb-28">
+        <div className="max-w-4xl mx-auto space-y-6 px-4 pt-4">
+          <Card className="space-y-6 p-4 md:p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void handleMonthStep('prev')}
+                    disabled={!hasPrevious}
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Mês atual</p>
+                    <div className="flex items-center gap-2">
+                      <h1 className="text-2xl font-semibold text-foreground">{monthLabel}</h1>
+                      <Badge variant={isLocked ? 'outline' : 'secondary'}>{isLocked ? 'Fechado' : 'Aberto'}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {movements.length} movimentos · {formatCurrency(summary.plannedAvailable)} planeado
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void handleMonthStep('next')}
+                    disabled={!hasNext}
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-primary">Recebido</p>
+                    <p className="mt-1 text-lg font-semibold text-primary">{formatCurrency(summary.actualIncomeTotal)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Planeado: {formatCurrency(summary.plannedIncomeTotal)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-destructive">Gasto</p>
+                    <p className="mt-1 text-lg font-semibold text-destructive">{formatCurrency(actualOutflows)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Limite: {formatCurrency(summary.plannedOutflows)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-accent/20 bg-accent/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-accent">Disponível</p>
+                    <p className="mt-1 text-lg font-semibold text-accent">
+                      {formatCurrency(summary.plannedAvailable - actualOutflows)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Plano mensal em curso</p>
+                  </div>
+                  <div className="rounded-lg border border-success/20 bg-success/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-success">Cash flow</p>
+                    <p className="mt-1 text-lg font-semibold text-success">{formatCurrency(summary.cashFlow)}</p>
+                    <p className="text-xs text-muted-foreground">Entradas - saídas reais</p>
+                  </div>
+                </div>
               </div>
-              <Button variant="outline" onClick={handleReopenMonth} disabled={isTogglingStatus}>
-                <Unlock className="mr-2 h-4 w-4" /> Reabrir mês
+              <div className="flex w-full flex-col gap-2 sm:w-60">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button className="w-full">
+                      <Plus className="mr-2 h-4 w-4" /> Novo movimento
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem
+                      onSelect={() => openMovementDialogWithDefaults('expense', { accountFromId: accountTypeMap.current })}
+                    >
+                      Despesa
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openMovementDialogWithDefaults('income', { accountToId: accountTypeMap.current })}
+                    >
+                      Entrada
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openMovementDialogWithDefaults('transfer', {
+                        accountFromId: accountTypeMap.current,
+                        accountToId: accountTypeMap.savings,
+                      })}
+                    >
+                      Transferência
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isLocked}
+                  onClick={() => setCardFundingDialogOpen(true)}
+                >
+                  <CreditCard className="mr-2 h-4 w-4" /> Entrada cartão
+                </Button>
+                <Button
+                  type="button"
+                  variant={isLocked ? 'secondary' : 'destructive'}
+                  disabled={isTogglingStatus}
+                  onClick={isLocked ? handleReopenMonth : handleCloseCurrentMonth}
+                >
+                  {isTogglingStatus
+                    ? 'A processar…'
+                    : isLocked
+                    ? 'Reabrir mês'
+                    : 'Fechar mês'}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="w-full justify-between">
+                      Mais ações <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onSelect={openWizard} disabled={isLocked}>
+                      Iniciar mês guiado
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => void handleCreateNextMonth()}
+                      disabled={isCreatingMonth}
+                    >
+                      {isCreatingMonth ? 'A duplicar…' : 'Novo mês a partir deste'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => void handleRecordPayday()}
+                      disabled={isRecordingPayday || isLocked}
+                    >
+                      {isRecordingPayday ? 'A lançar…' : 'Recebi o mês'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => handleDeleteMonth()}
+                      disabled={isDeletingMonth}
+                      className="text-destructive"
+                    >
+                      {isDeletingMonth ? 'A apagar…' : 'Apagar mês'}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handleRecordPayday()}
+                disabled={isRecordingPayday || isLocked}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                {isRecordingPayday ? 'A lançar entradas…' : 'Recebi o mês'}
+              </Button>
+              <Button type="button" variant="outline" onClick={openWizard} disabled={isLocked}>
+                <CalendarDays className="mr-2 h-4 w-4" /> Preparar mês
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleCreateNextMonth()}
+                disabled={isCreatingMonth}
+              >
+                <PlusCircle className="mr-2 h-4 w-4" /> {isCreatingMonth ? 'A duplicar…' : 'Novo mês'}
               </Button>
             </div>
           </Card>
-        )}
 
-        <Card className="p-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground">Inputs rápidos do mês</h3>
-              <p className="text-sm text-muted-foreground">
-                Introduz as entradas reais e despesas fixas. Guardamos tudo offline e recalculamos as metas das bolsas automaticamente.
-              </p>
-            </div>
-            <Button onClick={handleSaveInputs} disabled={isSavingInputs || isLocked}>
-              {isSavingInputs ? 'A guardar…' : 'Guardar alterações'}
-            </Button>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="input-income-base">Recebido na conta (€)</Label>
-              <Input
-                id="input-income-base"
-                type="number"
-                step="0.01"
-                value={formValues.incomeBase}
-                onChange={handleInputChange('incomeBase')}
-                disabled={isLocked}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="input-meal-card">Recebido no cartão refeição (€)</Label>
-              <Input
-                id="input-meal-card"
-                type="number"
-                step="0.01"
-                value={formValues.mealCard}
-                onChange={handleInputChange('mealCard')}
-                disabled={isLocked}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="input-extra">Recebido extra (subsídio, bónus, devoluções) (€)</Label>
-              <Input
-                id="input-extra"
-                type="number"
-                step="0.01"
-                value={formValues.incomeExtra}
-                onChange={handleInputChange('incomeExtra')}
-                disabled={isLocked}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="input-fixed">Despesas fixas reais (€)</Label>
-              <Input
-                id="input-fixed"
-                type="number"
-                step="0.01"
-                value={formValues.fixedExpenses}
-                onChange={handleInputChange('fixedExpenses')}
-                disabled={isLocked}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="input-food">Despesas reais de comida (€)</Label>
-              <Input
-                id="input-food"
-                type="number"
-                step="0.01"
-                value={formValues.foodExpenses}
-                onChange={handleInputChange('foodExpenses')}
-                disabled={isLocked}
-              />
-            </div>
-          </div>
-
-          {isSubsidyMonth(month) && (
-            <p className="mt-4 text-xs text-muted-foreground">
-              Junho e dezembro aplicam automaticamente a distribuição especial do subsídio quando inseres um valor extra.
-            </p>
+          {isLocked && (
+            <Card className="border border-primary/30 bg-primary/5 p-4">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-medium text-primary">Mês fechado</p>
+                  <p className="text-sm text-primary/80">
+                    Reabre para atualizar valores ou regista novos movimentos.
+                  </p>
+                </div>
+                <Button variant="outline" onClick={handleReopenMonth} disabled={isTogglingStatus}>
+                  <Unlock className="mr-2 h-4 w-4" /> Reabrir mês
+                </Button>
+              </div>
+            </Card>
           )}
-        </Card>
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Resumo automático</h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-primary/10 bg-primary/5 p-4">
-              <p className="text-xs text-primary uppercase tracking-wide">Rendimento</p>
-              <p className="text-2xl font-bold text-primary mt-2">
-                {formatCurrency(summary.actualIncomeTotal)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Planeado: {formatCurrency(summary.plannedIncomeTotal)}
-              </p>
+          <Card className="space-y-4 p-4 md:p-6">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Inputs rápidos do mês</h2>
+                <p className="text-sm text-muted-foreground">
+                  Introduz os valores reais para recalcular automaticamente as bolsas.
+                </p>
+              </div>
+              <Button type="button" onClick={handleSaveInputs} disabled={isSavingInputs || isLocked}>
+                {isSavingInputs ? 'A guardar…' : 'Guardar alterações'}
+              </Button>
             </div>
-            <div className="rounded-lg border border-destructive/10 bg-destructive/5 p-4">
-              <p className="text-xs text-destructive uppercase tracking-wide">Saídas (despesas + transferências)</p>
-              <p className="text-2xl font-bold text-destructive mt-2">
-                {formatCurrency(summary.actualExpensesTotal + summary.actualTransfersTotal)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Planeado: {formatCurrency(summary.plannedOutflows)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-accent/10 bg-accent/5 p-4">
-              <p className="text-xs text-accent uppercase tracking-wide">Disponível planeado</p>
-              <p className="text-2xl font-bold text-accent mt-2">
-                {formatCurrency(summary.plannedAvailable)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-success/10 bg-success/5 p-4">
-              <p className="text-xs text-success uppercase tracking-wide">Cash flow do mês</p>
-              <p className="text-2xl font-bold text-success mt-2">
-                {formatCurrency(summary.cashFlow)}
-              </p>
-            </div>
-          </div>
-        </Card>
+            <form
+              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSaveInputs();
+              }}
+            >
+              <div className="space-y-1">
+                <Label htmlFor="input-income-base">Recebido na conta (€)</Label>
+                <Input
+                  id="input-income-base"
+                  type="number"
+                  step="0.01"
+                  value={formValues.incomeBase}
+                  onChange={handleInputChange('incomeBase')}
+                  disabled={isLocked}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="input-credit">Recebido no cartão crédito (€)</Label>
+                <Input
+                  id="input-credit"
+                  type="number"
+                  step="0.01"
+                  value={(month.incomeCreditCard ?? 0).toFixed(2)}
+                  disabled
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ajusta através de “Recebi o mês” ou das definições.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="input-meal-card">Recebido no cartão refeição (€)</Label>
+                <Input
+                  id="input-meal-card"
+                  type="number"
+                  step="0.01"
+                  value={formValues.mealCard}
+                  onChange={handleInputChange('mealCard')}
+                  disabled={isLocked}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="input-extra">Entradas extra (€)</Label>
+                <Input
+                  id="input-extra"
+                  type="number"
+                  step="0.01"
+                  value={formValues.incomeExtra}
+                  onChange={handleInputChange('incomeExtra')}
+                  disabled={isLocked}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="input-fixed">Despesas fixas reais (€)</Label>
+                <Input
+                  id="input-fixed"
+                  type="number"
+                  step="0.01"
+                  value={formValues.fixedExpenses}
+                  onChange={handleInputChange('fixedExpenses')}
+                  disabled={isLocked}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="input-food">Despesas de comida (€)</Label>
+                <Input
+                  id="input-food"
+                  type="number"
+                  step="0.01"
+                  value={formValues.foodExpenses}
+                  onChange={handleInputChange('foodExpenses')}
+                  disabled={isLocked}
+                />
+              </div>
+            </form>
+          </Card>
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Metas automáticas das bolsas</h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border p-4 bg-muted/30">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Disponível para distribuir</p>
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {formatCurrency(monthDistribution.availableCash)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Saldo em dinheiro após despesas fixas ({formatCurrency(month.actualFixedExpenses ?? month.fixedExpenses ?? 0)} + comida {formatCurrency(month.actualFoodExpenses ?? month.plannedFood ?? 0)}).
-              </p>
+          <Card className="space-y-4 p-4 md:p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">Bolsas deste mês</h2>
+              <p className="text-sm text-muted-foreground">Disponível: {formatCurrency(bucketSummary.account.remainingPlan)}</p>
             </div>
-            <div className="rounded-lg border p-4 bg-muted/30">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Cartão refeição</p>
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {formatCurrency(monthDistribution.mealCardBudget)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Saldo planeado para comida via cartão.</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Poupança</p>
-              <p className="text-xl font-semibold text-success mt-1">
-                {formatCurrency(month.plannedSavings ?? 0)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Inclui metas base e subsídio quando existir.</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Crypto (Core)</p>
-              <p className="text-xl font-semibold text-foreground mt-1">
-                {formatCurrency(month.plannedCryptoCore ?? 0)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Distribuição automática para o núcleo.</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Shit Money</p>
-              <p className="text-xl font-semibold text-foreground mt-1">
-                {formatCurrency(month.plannedShitMoney ?? 0)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Limite mensal para gasto impulsivo.</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Lazer</p>
-              <p className="text-xl font-semibold text-foreground mt-1">
-                {formatCurrency(month.plannedLeisure ?? 0)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Eventos, cafés e diversão planeada.</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Buffer / Conta</p>
-              <p className="text-xl font-semibold text-foreground mt-1">
-                {formatCurrency(month.plannedBuffer ?? 0)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Reserva de segurança para a conta.</p>
-            </div>
-          </div>
-        </Card>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {bucketCards.map((card) => {
+                const plan = card.plan ?? 0;
+                const actual = card.actual ?? 0;
+                const remaining = card.remaining ?? 0;
+                const progress = plan > 0 ? Math.min((actual / plan) * 100, 180) : actual > 0 ? 100 : 0;
+                const actionDisabled =
+                  isLocked || !card.action?.defaults ||
+                  (card.action.type === 'expense' && !card.action.defaults.accountFromId) ||
+                  (card.action.type !== 'expense' && (!card.action.defaults.accountFromId || !card.action.defaults.accountToId));
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Entradas</h3>
-          <div className="space-y-3">
-            {Object.entries(INCOME_CATEGORY_LABELS).map(([key, label]) => {
-              const planned = plannedIncome[key as keyof typeof plannedIncome] ?? 0;
-              const actual = actualIncome[key as keyof typeof actualIncome] ?? 0;
-              const progress = planned > 0 ? Math.min((actual / planned) * 100, 150) : 0;
-              const diff = actual - planned;
-
-              return (
-                <div key={key} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium text-foreground">{label}</span>
-                    <span className="text-muted-foreground">{formatCurrency(planned)}</span>
+                return (
+                  <div key={card.id} className="rounded-xl border border-muted/60 bg-muted/10 p-4 space-y-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{card.title}</p>
+                        <p className="text-xs text-muted-foreground">{card.subtitle}</p>
+                      </div>
+                      {card.action && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground"
+                          disabled={actionDisabled}
+                          onClick={() =>
+                            openMovementDialogWithDefaults(card.action!.type, card.action!.defaults)
+                          }
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Planeado</span>
+                        <span className="font-medium text-foreground">{formatCurrency(plan)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Real</span>
+                        <span className="font-medium text-foreground">{formatCurrency(actual)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Falta</span>
+                        <span className={`font-medium ${remaining < 0 ? 'text-destructive' : 'text-success'}`}>
+                          {formatCurrency(remaining)}
+                        </span>
+                      </div>
+                      <Progress value={progress} className="h-2" />
+                    </div>
                   </div>
-                  <Progress value={progress} className="h-2" />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Real: {formatCurrency(actual)}</span>
-                    <span>{diff >= 0 ? "+" : ""}{formatCurrency(diff)}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+                );
+              })}
+            </div>
+          </Card>
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Despesas</h3>
-          <div className="space-y-3">
-            {Object.entries(EXPENSE_CATEGORY_LABELS).map(([key, label]) => {
-              const planned = plannedExpenses[key as keyof typeof plannedExpenses] ?? 0;
-              const actual = actualExpenses[key as keyof typeof actualExpenses] ?? 0;
-              const progress = planned > 0 ? Math.min((actual / planned) * 100, 150) : 0;
-              const diff = planned - actual;
-
-              return (
-                <div key={key} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium text-foreground">{label}</span>
-                    <span className="text-muted-foreground">{formatCurrency(planned)}</span>
+          {suggestions.length > 0 && (
+            <Card className="space-y-3 border border-primary/20 bg-primary/5 p-4 md:p-6">
+              <h2 className="text-lg font-semibold text-foreground">Sugestões para poupar mais</h2>
+              <div className="space-y-2">
+                {suggestions.map((suggestion) => (
+                  <div key={suggestion.id} className="rounded-lg border border-primary/20 bg-background/80 p-3 text-sm">
+                    {suggestion.message}
                   </div>
-                  <Progress value={progress} className="h-2" />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Real: {formatCurrency(actual)}</span>
-                    <span>{diff <= 0 ? `+${formatCurrency(Math.abs(diff))}` : `Falta ${formatCurrency(diff)}`}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+                ))}
+              </div>
+            </Card>
+          )}
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Investimentos &amp; Buffer</h3>
-          <div className="space-y-3">
-            {Object.entries(TRANSFER_CATEGORY_LABELS).map(([key, label]) => {
-              const planned = plannedTransfers[key as keyof typeof plannedTransfers] ?? 0;
-              const actual = actualTransfers[key as keyof typeof actualTransfers] ?? 0;
-              const progress = planned > 0 ? Math.min((actual / planned) * 100, 150) : 0;
-              const diff = planned - actual;
+          <Card className="space-y-4 p-4 md:p-6">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Despesa rápida</h2>
+                <p className="text-sm text-muted-foreground">Regista um gasto simples em três toques.</p>
+              </div>
+            </div>
+            <form
+              className="grid gap-3 md:grid-cols-4"
+              onSubmit={handleQuickExpenseSubmit}
+            >
+              <div className="space-y-1">
+                <Label htmlFor="quick-amount">Valor (€)</Label>
+                <Input
+                  id="quick-amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={quickAmount}
+                  onChange={(event) => setQuickAmount(event.target.value)}
+                  disabled={isLocked}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Categoria</Label>
+                <Select value={quickCategory} onValueChange={setQuickCategory} disabled={isLocked}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleciona" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {quickExpenseOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Conta</Label>
+                <Select value={quickAccount} onValueChange={setQuickAccount} disabled={isLocked}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Conta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accountOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" className="w-full" disabled={isQuickSaving || isLocked}>
+                  {isQuickSaving ? 'A registar…' : 'Adicionar'}
+                </Button>
+              </div>
+            </form>
+          </Card>
 
-              return (
-                <div key={key} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium text-foreground">{label}</span>
-                    <span className="text-muted-foreground">{formatCurrency(planned)}</span>
-                  </div>
-                  <Progress value={progress} className="h-2" />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Real: {formatCurrency(actual)}</span>
-                    <span>{diff <= 0 ? `+${formatCurrency(Math.abs(diff))}` : `Falta ${formatCurrency(diff)}`}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        {/* Movements List */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground">Movimentos</h3>
-            <span className="text-sm text-muted-foreground">{movements.length} registos</span>
-          </div>
-          
-          <div className="space-y-2">
-            {movements.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Ainda não há movimentos este mês</p>
-            ) : (
-              movements
-                .sort((a, b) => b.date.getTime() - a.date.getTime())
-                .map((mov) => {
-                  const Icon = categoryIcons[mov.type];
-                  const accountFrom = accounts.find(a => a.id === mov.accountFromId);
-                  const accountTo = accounts.find(a => a.id === mov.accountToId);
+          <Card className="space-y-4 p-4 md:p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-lg font-semibold text-foreground">Movimentos recentes</h2>
+              <Select value={movementFilter} onValueChange={setMovementFilter}>
+                <SelectTrigger className="w-56">
+                  <SelectValue placeholder="Filtrar por categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {movementFilterOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              {recentMovements.length === 0 ? (
+                <p className="py-10 text-center text-muted-foreground">
+                  Ainda não registaste movimentos com este filtro.
+                </p>
+              ) : (
+                recentMovements.map((movement) => {
+                  const Icon = categoryIcons[movement.type];
+                  const accountFrom = accounts.find((account) => account.id === movement.accountFromId);
+                  const accountTo = accounts.find((account) => account.id === movement.accountToId);
 
                   return (
                     <div
-                      key={mov.id}
-                      className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                      key={movement.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-muted/40 bg-muted/10 p-3"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${
-                          mov.type === 'income' ? 'bg-success/10 text-success' :
-                          mov.type === 'expense' ? 'bg-destructive/10 text-destructive' :
-                          'bg-accent/10 text-accent'
-                        }`}>
-                          <Icon className="w-4 h-4" />
+                        <div
+                          className={`rounded-lg p-2 ${
+                            movement.type === 'income'
+                              ? 'bg-success/10 text-success'
+                              : movement.type === 'expense'
+                              ? 'bg-destructive/10 text-destructive'
+                              : 'bg-accent/10 text-accent'
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="font-medium text-foreground">
-                            {categoryLabels[mov.category] || mov.category}
+                          <p className="text-sm font-medium text-foreground">
+                            {categoryLabels[movement.category] ?? movement.category}
                           </p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{format(new Date(mov.date), "dd MMM", { locale: pt })}</span>
-                            {mov.type === 'transfer' && accountFrom && accountTo && (
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span>{format(new Date(movement.date), 'dd MMM', { locale: pt })}</span>
+                            {movement.type === 'transfer' && accountFrom && accountTo && (
                               <>
-                                <span>•</span>
-                                <span>{accountFrom.name}</span>
-                                <ArrowRight className="w-3 h-3" />
+                                <span>• {accountFrom.name}</span>
+                                <ArrowRight className="h-3 w-3" />
                                 <span>{accountTo.name}</span>
                               </>
                             )}
-                            {mov.type === 'expense' && accountFrom && (
-                              <>
-                                <span>•</span>
-                                <span>{accountFrom.name}</span>
-                              </>
-                            )}
-                            {mov.type === 'income' && accountTo && (
-                              <>
-                                <span>•</span>
-                                <span>{accountTo.name}</span>
-                              </>
-                            )}
+                            {movement.type === 'expense' && accountFrom && <span>• {accountFrom.name}</span>}
+                            {movement.type === 'income' && accountTo && <span>• {accountTo.name}</span>}
                           </div>
-                          {mov.note && (
-                            <p className="text-xs text-muted-foreground mt-1">{mov.note}</p>
+                          {movement.note && (
+                            <p className="text-xs text-muted-foreground">{movement.note}</p>
                           )}
                         </div>
                       </div>
-                      <div className={`font-bold ${
-                        mov.type === 'income' ? 'text-success' : 'text-foreground'
-                      }`}>
-                        {mov.type === 'income' ? '+' : '-'}{formatCurrency(mov.amount)}
+                      <div
+                        className={`text-sm font-semibold ${
+                          movement.type === 'income' ? 'text-success' : 'text-foreground'
+                        }`}
+                      >
+                        {movement.type === 'income' ? '+' : '-'}
+                        {formatCurrency(movement.amount)}
                       </div>
                     </div>
                   );
                 })
+              )}
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      <Button
+        type="button"
+        className="fixed bottom-6 right-6 flex items-center gap-2 rounded-full px-5 py-3 shadow-lg"
+        onClick={() => openMovementDialogWithDefaults('expense', { accountFromId: accountTypeMap.current })}
+        disabled={isLocked}
+      >
+        <Plus className="h-5 w-5" /> Movimento
+      </Button>
+
+      <MovementDialog
+        open={movementDialogOpen}
+        onOpenChange={setMovementDialogOpen}
+        type={movementDialogType}
+        accounts={accounts}
+        onSave={handleMovementDialogSave}
+        defaults={movementDialogDefaults}
+      />
+
+      <CardFundingDialog
+        open={cardFundingDialogOpen}
+        onOpenChange={setCardFundingDialogOpen}
+        defaultMealAmount={month.incomeMealCard ?? 0}
+        defaultCreditAmount={month.incomeCreditCard ?? 0}
+        onSave={async ({ mealCard, creditCard }) => {
+          await persistMonthInputs(
+            {
+              incomeBase: month.incomeBase ?? 0,
+              mealCard,
+              incomeExtra: month.subsidyApplied ? month.subsidyAmount ?? 0 : month.incomeExtraordinary ?? 0,
+              fixedExpenses: month.actualFixedExpenses ?? month.fixedExpenses ?? 0,
+              foodExpenses: month.actualFoodExpenses ?? month.plannedFood ?? 0,
+              creditCard,
+            },
+            {
+              successMessage: {
+                title: 'Cartões atualizados',
+                description: 'Recalculámos o plano com os novos saldos.',
+              },
+            },
+          );
+        }}
+      />
+
+      <Dialog open={isWizardOpen} onOpenChange={setIsWizardOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Preparar mês em 1 minuto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {wizardStep === 0 && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Introduz o que entrou na tua conta e no cartão de crédito neste início de mês.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label>Recebido na conta (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={wizardValues.incomeBase.toString()}
+                      onChange={(event) =>
+                        setWizardValues((prev) => ({
+                          ...prev,
+                          incomeBase: parseInputValue(event.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Carregamento do cartão crédito (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={wizardValues.creditCard.toString()}
+                      onChange={(event) =>
+                        setWizardValues((prev) => ({
+                          ...prev,
+                          creditCard: parseInputValue(event.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            {wizardStep === 1 && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Agora indica o saldo do cartão refeição e entradas extra deste mês.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label>Cartão refeição (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={wizardValues.mealCard.toString()}
+                      onChange={(event) =>
+                        setWizardValues((prev) => ({
+                          ...prev,
+                          mealCard: parseInputValue(event.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Entradas extra (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={wizardValues.incomeExtra.toString()}
+                      onChange={(event) =>
+                        setWizardValues((prev) => ({
+                          ...prev,
+                          incomeExtra: parseInputValue(event.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            {wizardStep === 2 && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Ajusta as despesas fixas e alimentação reais deste mês.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label>Despesas fixas (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={wizardValues.fixedExpenses.toString()}
+                      onChange={(event) =>
+                        setWizardValues((prev) => ({
+                          ...prev,
+                          fixedExpenses: parseInputValue(event.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Despesas de comida (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={wizardValues.foodExpenses.toString()}
+                      onChange={(event) =>
+                        setWizardValues((prev) => ({
+                          ...prev,
+                          foodExpenses: parseInputValue(event.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            {wizardStep === 3 && wizardPreview && wizardPreviewDistribution && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Revê e ajusta as metas antes de começares o mês.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { key: 'savings', label: 'Poupança', field: 'savings' as const },
+                    { key: 'cryptoCore', label: 'Crypto Core', field: 'cryptoCore' as const },
+                    { key: 'shitMoney', label: 'Shit Money', field: 'shitMoney' as const },
+                    { key: 'leisure', label: 'Lazer', field: 'leisure' as const },
+                    { key: 'buffer', label: 'Buffer', field: 'buffer' as const },
+                  ].map((item) => (
+                    <div key={item.key} className="space-y-1">
+                      <Label>{item.label} (€)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={wizardValues.overrides[item.field].toString()}
+                        onChange={(event) =>
+                          setWizardValues((prev) => ({
+                            ...prev,
+                            overrides: {
+                              ...prev.overrides,
+                              [item.field]: parseInputValue(event.target.value),
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-lg border border-muted/50 bg-muted/10 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Resumo automático</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Disponível</p>
+                      <p className="text-base font-semibold text-foreground">
+                        {formatCurrency(wizardPreviewDistribution.availableCash)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Cartão refeição</p>
+                      <p className="text-base font-semibold text-foreground">
+                        {formatCurrency(wizardPreviewDistribution.mealCardBudget)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
-        </Card>
-      </div>
-    </div>
+          <DialogFooter className="flex justify-between">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Passo {wizardStep + 1} de 4</span>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={handleWizardPrevious} disabled={wizardStep === 0}>
+                Anterior
+              </Button>
+              {wizardStep < 3 ? (
+                <Button type="button" onClick={handleWizardNext}>
+                  Seguinte
+                </Button>
+              ) : (
+                <Button type="button" onClick={() => void handleWizardApply()} disabled={isWizardSubmitting}>
+                  {isWizardSubmitting ? 'A aplicar…' : 'Aplicar plano'}
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
-}

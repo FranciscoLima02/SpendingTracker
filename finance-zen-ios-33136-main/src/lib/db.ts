@@ -1,5 +1,6 @@
 // IndexedDB setup for offline-first storage
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { generateId } from './id';
 
 export interface AppSettings {
   id: string;
@@ -278,7 +279,7 @@ export async function initializeDefaultData() {
   if (missingAccounts.length > 0) {
     for (const definition of missingAccounts) {
       const account: Account = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         type: definition.type,
         name: definition.name,
         isActive: true,
@@ -323,7 +324,7 @@ export async function createMonthWithDefaults({
   const incomeExtraordinary = overrides?.extraordinaryIncome ?? settings.monthlyExtraordinaryIncome ?? 0;
 
   const monthRecord: Month = {
-    id: crypto.randomUUID(),
+    id: generateId(),
     year,
     month,
     isClosed: false,
@@ -370,7 +371,7 @@ export async function createMonthWithDefaults({
     const openingBalance = previousBalance?.manualCurrentBalance ?? previousBalance?.openingBalance ?? 0;
 
     const balance: AccountBalance = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       accountId: account.id,
       forMonthYear: year,
       forMonthMonth: month,
@@ -407,7 +408,7 @@ export async function createMonthWithDefaults({
 
   if (incomeBase > 0 && defaultAccountId) {
     movements.push({
-      id: crypto.randomUUID(),
+      id: generateId(),
       date: incomeDate,
       type: 'income',
       amount: incomeBase,
@@ -423,7 +424,7 @@ export async function createMonthWithDefaults({
 
   if (incomeMealCard > 0 && accountsByType['mealCard']) {
     movements.push({
-      id: crypto.randomUUID(),
+      id: generateId(),
       date: baseMovementDates.mealCard,
       type: 'income',
       amount: incomeMealCard,
@@ -439,7 +440,7 @@ export async function createMonthWithDefaults({
 
   if (incomeCreditCard > 0 && creditCardAccountId) {
     movements.push({
-      id: crypto.randomUUID(),
+      id: generateId(),
       date: baseMovementDates.creditCard,
       type: 'income',
       amount: incomeCreditCard,
@@ -455,7 +456,7 @@ export async function createMonthWithDefaults({
 
   if (incomeExtraordinary > 0 && defaultAccountId) {
     movements.push({
-      id: crypto.randomUUID(),
+      id: generateId(),
       date: baseMovementDates.extraordinary,
       type: 'income',
       amount: incomeExtraordinary,
@@ -472,7 +473,7 @@ export async function createMonthWithDefaults({
   const isSubsidyMonth = month === 6 || month === 12;
   if (isSubsidyMonth && settings.subsidyAmount > 0 && defaultAccountId) {
     movements.push({
-      id: crypto.randomUUID(),
+      id: generateId(),
       date: baseMovementDates.subsidy,
       type: 'income',
       amount: settings.subsidyAmount,
@@ -489,7 +490,7 @@ export async function createMonthWithDefaults({
   const pushCreditExpense = (category: 'rent' | 'shitMoney', amount: number, date: Date) => {
     if (!creditCardAccountId || amount <= 0) return;
     movements.push({
-      id: crypto.randomUUID(),
+      id: generateId(),
       date,
       type: 'expense',
       amount,
@@ -517,7 +518,7 @@ export async function createMonthWithDefaults({
     if (!accountToId) return;
 
     movements.push({
-      id: crypto.randomUUID(),
+      id: generateId(),
       date,
       type: 'transfer',
       amount,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,12 +13,22 @@ import { pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Movement, Account } from "@/lib/db";
 
+export interface MovementDialogDefaults {
+  category?: string;
+  accountFromId?: string;
+  accountToId?: string;
+  amount?: number;
+  note?: string;
+  date?: Date;
+}
+
 interface MovementDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   type: 'expense' | 'transfer' | 'income';
   accounts: Account[];
   onSave: (movement: Partial<Movement>) => Promise<void>;
+  defaults?: MovementDialogDefaults;
 }
 
 const categories = {
@@ -48,7 +58,7 @@ const categories = {
   ],
 } as const;
 
-export function MovementDialog({ open, onOpenChange, type, accounts, onSave }: MovementDialogProps) {
+export function MovementDialog({ open, onOpenChange, type, accounts, onSave, defaults }: MovementDialogProps) {
   const [date, setDate] = useState<Date>(new Date());
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -56,6 +66,27 @@ export function MovementDialog({ open, onOpenChange, type, accounts, onSave }: M
   const [accountTo, setAccountTo] = useState("");
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setCategory(defaults?.category ?? "");
+    setAccountFrom(defaults?.accountFromId ?? "");
+    setAccountTo(defaults?.accountToId ?? "");
+    setNote(defaults?.note ?? "");
+
+    if (defaults?.amount != null && !Number.isNaN(defaults.amount)) {
+      setAmount(defaults.amount.toFixed(2));
+    } else {
+      setAmount("");
+    }
+
+    if (defaults?.date) {
+      setDate(defaults.date);
+    } else {
+      setDate(new Date());
+    }
+  }, [open, defaults]);
 
   const handleSave = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
