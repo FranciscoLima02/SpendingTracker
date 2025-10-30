@@ -1,91 +1,96 @@
-# Finance Zen Offline-First Redesign
+# Finance Zen Daily Manual-Use Redesign
 
 ## Main UX Problems Found
-- **Fragmented month management**: opening, closing, and reviewing a month live in different areas, forcing hunting through menus and breaking the “one surface” promise.
-- **Heavy capture flow**: adding an expense or income requires multiple screens, duplicated category selection, and manual account picks every time.
-- **Low glanceability**: core indicators (left to spend, savings, balances per card) are scattered below the fold, so users scroll before acting.
-- **Category opacity**: sectors mix fixed, variable, and investing buckets without visual grouping, making it hard to know where money is leaking.
-- **Clunky month rollover**: no clear guidance on what happens to leftover balances or how the next month inherits targets, which causes spreadsheet-style uncertainty.
-- **Inconsistent visual rhythm**: typography sizes and spacing shift between panels, producing a cramped, non-native feel that increases cognitive load.
+- **Too many steps to capture**: adding a movement still requires navigating away from the dashboard and repeating category/account picks.
+- **Month context is hidden**: users cannot see which month is active or jump to a previous one without leaving the screen.
+- **Buckets sprawl vertically**: remaining amounts live in long lists that force scrolling before the critical “left to spend” numbers appear.
+- **Lifecycle friction**: opening/closing months asks multiple questions and scatters actions, so duplicates and locked months become confusing.
+- **Floating actions vanish**: capture triggers scroll with the content, so the “+” action disappears when reviewing history.
 
-## Functional UX Redesign Proposal
-- **Single Monthly Canvas**: keep the entire month on one screen with stacked modules—`Hero Totals`, `Sector Overview`, `Recent Activity`, `Month Checklist`. Each module collapses/expands but defaults to a compressed view so everything fits on a 390 px viewport without scrolling.
-- **Inline Capture Rail**: anchor a floating `+` button that expands into an inline composer at the bottom of the dashboard. The composer remembers the last sector, pre-fills the most recent amount, and swaps between Expense/Income/Transfer in-place.
-- **One-tap Sector Updates**: each sector row shows remaining amount and current balance; tapping the amount opens a numeric keypad overlay with +/- quick nudges and the ability to mark it as planned vs. actual.
-- **Guided Month Lifecycle**: the top header hosts `Open Month` / `Close Month` CTAs that morph based on state. Opening clones budgets, seeds mandatory outflows, and prompts for meal/credit funding. Closing walks through review, rollover decisions, and locks history.
-- **Transparent Calculations**: info buttons surface inline formulas (e.g., “Essentials target = Rent + Utilities + Food target”). The user can edit ratios directly from the Sector Overview without leaving the screen.
-- **Offline Integrity**: every action immediately writes to local storage (IndexedDB/CoreData). When the user closes the month, a JSON snapshot is saved for manual backup.
+## Updated Navigation Structure
+- **Bottom navigation (3 tabs)**
+  1. **Hoje (Today)** – the compact monthly dashboard with capture, suggestions, and account balances (default landing).
+  2. **Meses** – stacked month summaries with export/share. Also the entry point for archival analytics.
+  3. **Preferências** – ratios, bucket rules, defaults, backups.
+- **Month-level gestures**
+  - Horizontal swipe on the month header moves to previous/next month in the background and animates the cards.
+  - Pull-to-refresh re-syncs the local cache (still offline-first) and reveals a quick “Duplicate previous month” CTA if the upcoming month is missing.
+  - Long-press the floating `+ movimento` FAB to re-open the last category/account combination.
 
-## New Navigation Structure
-- **Primary Tab Bar (bottom)**:
-  1. **Month** (default): compact dashboard + capture rail + lifecycle actions.
-  2. **History**: horizontal month scroller with read-only summaries, export, and trend charts.
-  3. **Settings**: category targets, formula ratios, card defaults, backup/restore.
-- **Gestures & Shortcuts**:
-  - Swipe left/right on the Month title to jump between months.
-  - Pull down on the Month screen reveals quick filters (Essentials vs Lifestyle vs Investing).
-  - Long-press the `+` button to open the last used flow instantly.
-  - Haptic tap on sector rows confirms updates.
+## Month Header Component
+- **Structure**: sticky 64 px bar pinned under the status bar.
+  - Left chevron button ↔️ jump to previous month (disabled if oldest month).
+  - Center segment: `Mês Atual` title on the first line, `Junho 2025 · Fechado`/`Aberto` status pill on the second.
+  - Right chevron button ↔️ jump to next month (disabled until a future month exists).
+  - Secondary row under the header: two quick actions.
+    - Primary button: `Duplicar mês anterior` when viewing the future slot, otherwise `Fechar mês` (if open) or `Reabrir` (if closed).
+    - Secondary ghost button: `Mover para mês atual` when browsing older history.
+- **Behavior**: header remains visible while buckets scroll underneath. All calculations stay memoized so header controls never change hook order when the component re-renders.
 
-## UI Layout Per Screen
-### Month Dashboard (default)
-- **Sticky Header (56 px)**: Month name dropdown + streak indicator, `Open/Close` button (primary accent), current day marker.
-- **Hero Stat Strip**: four chips (`Left to Spend`, `Saved`, `Credit Card`, `Meal Card`) with progress rings and microcopy. Each chip is tappable to open detail sheet.
-- **Sector Overview**: accordion grouped into Essentials, Lifestyle, Investing, Buffer. Each row shows sector name, remaining €/planned €, trend arrow, and status dot (green/amber/red). Collapse control lives on the right.
-- **Recent Activity Card**: five latest movements in a compact table with inline edit icons. “See all” reveals a modal list.
-- **Month Checklist**: pill buttons for `Fund Cards`, `Confirm Rent`, `Review Savings`, `Close Month`. Completed items gain checkmark and greyed accent.
-- **Floating Action Dock**: right-aligned on large screens, bottom-centered on mobile—`+` main button, flanked by ghost buttons for `Transfer` and `Adjust`.
+## Main Screen Layout (Hoje tab)
+1. **Month Header (sticky)** – as above.
+2. **Overview chips (2-column grid)** – `Disponível`, `Poupado`, `Cartão Refeição`, `Cartão Crédito`. Each chip shows start balance, spent, and remaining; tap opens detailed sheet.
+3. **Buckets rail (compact cards)** – horizontally scrollable at the top of the content with six compact cards (Conta, Refeição, Lazer, Shit Money, Poupança, Crypto). Each card: remaining € in bold, mini progress bar, and pill status (On track / Atenção / Excedido). Long-press allows reordering.
+4. **Buckets table (accordion)** – collapsible section listing all categories grouped by bucket. Rows show `Categoria · gasto / meta · restante`. Tapping the remaining amount opens inline keypad.
+5. **Sugestões de poupança** – dynamic list of up to two rule-based messages with actionable CTA (e.g., `Transferir €40 para Poupança`). Dismiss hides until next rule trigger.
+6. **Histórico rápido** – last four movements with account icon, amount, and tap-to-edit.
+7. **Floating `+ movimento` button** – anchored bottom-right (56 px), always visible thanks to safe-area aware offset. Expands to a bottom sheet capture form.
 
-### Add / Edit Value Sheet
-- **Entry Type Segmented Control**: Expense · Income · Transfer.
-- **Quick Chips Row**: last three sectors used; tapping applies sector + last amount.
-- **Amount Pad**: numeric keypad with haptic feedback, includes quick add/subtract €5 and €10 buttons.
-- **Sector & Account Pickers**: inline pill selector; Transfer view shows From/To columns.
-- **Notes & Tags**: optional collapsed field, expanding with one tap.
-- **Confirm Bar**: sticky bottom `Save` button with live preview (“Will deduct €42 from Credit Card · Shit Money”). Undo toast after save.
+### Notes on Compact Information
+- Use two-column grids for chips and pair each card with micro labels to avoid wrapping.
+- Collapse completed bucket groups by default after midday to keep the screen short.
+- Replace long tables with pill badges and progress bars sized 4 px height to indicate status without consuming vertical real estate.
+- Sticky FAB ensures capture is always one tap; hide only when keyboard is open.
 
-### Close Month Flow
-- **Step 1 – Summary**: modal overlay with snapshot cards for Income, Expenses, Net Saved, Carry-over. Confetti accent if net positive.
-- **Step 2 – Rollover Decisions**: sliders for each account (Credit, Meal, Savings, Crypto) with presets (Keep, Move to Savings, Zero Out). Shows resulting opening balances.
-- **Step 3 – Lock & Note**: toggle to archive the month, optional reflection note, final `Close Month` CTA.
+## Add-Movement Modal
+- **Entry type selector** at the top (Despeza · Receita · Transferência) using pill toggles.
+- **Quick categories** row with up to six adaptive chips: last three categories + pinned favorites (Lazer, Comida, Renda).
+- **Amount keypad** fills the lower half; supports direct typing and +/− step buttons.
+- **Source selector** (Conta, Refeição, Poupança, Crypto, Shit Money, Lazer) as segmented buttons with balance preview.
+- **Date & nota** collapsed under “Detalhes”. Default date = today; previous date remembered until reset.
+- **Primary CTA**: `Registar movimento` with summary line (“-€18 · Lazer via Cartão Crédito”). Confirmation triggers haptic and auto-dismiss in <300 ms.
 
-### History Screen
-- **Month Carousel**: scrollable chips showing net result and left-to-spend delta.
-- **Selected Month Summary**: condensed version of the dashboard but read-only.
-- **Trends Module**: sparkline comparisons (Savings vs Target, Essentials %), export button.
+## Month Lifecycle Logic
+- **Open / Duplicate month**
+  - One visible CTA: `Duplicar mês anterior`. Pressing clones last month’s plan, carries ratios, and seeds fixed expenses. Modal asks only for adjustments to starting balances if needed.
+- **Close month**
+  - Triggered from header or checklist card.
+  - Step 1 summary: totals for Entradas, Despesas, Poupança, Resultado.
+  - Step 2 prompt: “Mover €XX sobrante para Poupança?” with quick responses (`Mover tudo`, `Mover parte`, `Manter nas contas`). If accepted, auto-creates transfer movements.
+  - Step 3 confirmation: lock month, add optional note. After locking, inline toast explains how to reopen.
 
-## Color & Typography System
-- **Palette**:
-  - Base background: `#0E1114` (soft charcoal).
-  - Surface cards: `#161B22`.
-  - Primary accent: `#5D8CFF` (actions and progress).
-  - Secondary accent: `#4DC2A6` (positive balances).
-  - Warning: `#F5C045`; Danger: `#FF6B6B`.
-  - Neutral text: `#F7F9FC` (primary), `#9AA4B2` (secondary).
-- **Typography**:
-  - Primary: SF Pro Text / Inter fallback.
-  - Heading size ladder: 24 px (H1 hero numbers), 18 px (H2 section titles), 15 px (labels), 13 px (meta captions).
-  - Numerals use tabular figures for vertical alignment.
-- **Spacing**:
-  - Base unit: 8 px.
-  - Module padding: 16 px.
-  - Minimum tap target: 52 × 52 px.
-  - Card radius: 16 px.
+## Financial Summaries
+- **Monthly**: hero chips show `Disponível`, `Gasto`, `Poupança`, `Investido`. Buckets display `Meta vs Real vs Restante` with status color.
+- **Global** (Meses tab): timeline cards summarizing each month’s net, savings rate, and leftover distribution. Filter chips at top (Essenciais / Estilo de vida / Investimento).
 
-## Interaction Design
-- **One-Tap Logic**: tapping a sector amount opens the keypad sheet anchored to that row; saving collapses the sheet with a spring animation (220 ms) and emits haptic success.
-- **Floating Composer**: `+` button expands into a bottom sheet with contextual title; swiping down cancels. Re-opens with last context when triggered from inline edit icons.
-- **Month Lifecycle Feedback**: opening a month triggers a subtle page curl animation and updates the checklist; closing shows a celebratory pulse and archives the dashboard in the History tab.
-- **Micro-interactions**: progress rings animate from previous value to new value on every save; checklist pills flip vertically when completed.
-- **Undo Snackbar**: persists for 8 seconds with “Undo” action, respecting reduced motion settings.
+## Visual System
+- **Color palette**
+  - Background: `#0F1115` (deep neutral).
+  - Card surface: `#161921`.
+  - Primary accent: `#4D8CFF` (actions, progress bars).
+  - Secondary accent: `#47C5A2` (positive states), `#FFB84D` (warnings), `#FF6B6B` (overspend alerts).
+  - Text: `#F4F7FB` primary, `#9AA5B5` secondary, `#5B6572` dividers.
+- **Typography**
+  - Font: SF Pro Text (Dynamic Type). Headline 20 pt for balances, 16 pt titles, 13 pt captions.
+  - Numbers use tabular figures and subtle letter-spacing (-1%).
+- **Spacing & Shape**
+  - 8 px base grid; chips 12 px internal padding.
+  - Card radius 14 px; FAB radius 28 px.
+  - Progress bars height 4 px with rounded ends.
+
+## Interaction Design & Feedback
+- **One-tap capture**: FAB opens modal already focused on amount field; recent category chip auto-populates source/bucket to reduce taps.
+- **Inline edits**: tapping remaining value in bucket row slides up mini keypad. Saving plays haptic `success` and animates progress bar.
+- **Month transitions**: swiping header triggers slide animation with fade of content; ensures state persists offline.
+- **Reduced motion**: respect `prefers-reduced-motion` by replacing transitions with opacity fades.
+- **Undo & confirmation**: after saving or closing month, show 6 s snackbar with Undo.
 
 ## Accessibility & Simplicity Improvements
-- Color contrast meets WCAG AA (accent on dark surfaces ≥ 4.5:1). Provide high-contrast toggle that swaps to lighter surfaces if preferred.
-- Text scales with Dynamic Type up to 120% while maintaining layout integrity via auto-wrapping hero stats and stacking chips.
-- VoiceOver labels include formulas (“Left to Spend, €320, calculated from targets minus spending”).
-- All primary actions reachable with external keyboard: `⌘+N` new entry, arrow keys navigate sectors, `Enter` confirms.
-- Motion respects `prefers-reduced-motion`, swapping to opacity fades and disabling confetti.
-- Offline state indicator sits in header with clear icon + label (“Offline · Data saved locally”).
+- Maintain 4.5:1 contrast on all text vs background; use accent color only when contrast passes WCAG AA.
+- All tappable targets ≥48 × 48 pt, with trailing chevrons to hint interactivity.
+- VoiceOver labels detail bucket status (“Lazer, €45 restantes de €120, 62% gasto”).
+- Numeric keypad supports hardware keyboard input and announces characters for screen readers.
+- Offline badge in header clarifies sync status.
 
-## Extra Option
+## Notes for Visual Mock Generation
 Generate redesigned screen mockups in flat minimal style, showing dashboard, month view, add expense modal, and close-month summary.
