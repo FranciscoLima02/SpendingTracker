@@ -5,7 +5,6 @@ export type IncomeCategoryKey =
   | 'incomeSalary'
   | 'incomeSubsidy'
   | 'incomeMealCard'
-  | 'incomeCreditCard'
   | 'incomeExtraordinary';
 
 export type ExpenseCategoryKey =
@@ -29,7 +28,6 @@ export const INCOME_CATEGORY_LABELS: Record<IncomeCategoryKey, string> = {
   incomeSalary: 'Rendimento Base',
   incomeSubsidy: 'Subsídio',
   incomeMealCard: 'Cartão Refeição',
-  incomeCreditCard: 'Cartão Crédito',
   incomeExtraordinary: 'Extraordinário',
 };
 
@@ -474,7 +472,6 @@ export function calculatePlannedIncome(month: Month): Record<IncomeCategoryKey, 
     incomeSalary: month.incomeBase ?? 0,
     incomeSubsidy: isSubsidyMonth(month) ? month.subsidyAmount ?? 0 : 0,
     incomeMealCard: month.incomeMealCard ?? 0,
-    incomeCreditCard: month.incomeCreditCard ?? 0,
     incomeExtraordinary: month.incomeExtraordinary ?? 0,
   };
 }
@@ -634,7 +631,7 @@ export function calculateFixedVsVariable(movements: Movement[]): {
 }
 
 export function calculateCashFlow(month: Month, movements: Movement[]): number {
-  const openingBalance = (month.incomeMealCard ?? 0) + (month.incomeCreditCard ?? 0);
+  const openingBalance = month.incomeMealCard ?? 0;
   const incomeTotal = calculateActualIncomeTotal(movements);
   const expenseTotal = calculateActualExpenseTotal(movements);
   const transferTotal = calculateActualTransferTotal(movements);

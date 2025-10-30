@@ -72,7 +72,6 @@ const Index = () => {
         ? {
             ...loadedSettings,
             monthlyMealCardBalance: loadedSettings.monthlyMealCardBalance ?? 0,
-            monthlyCreditCardBalance: loadedSettings.monthlyCreditCardBalance ?? 0,
             monthlyExtraordinaryIncome: loadedSettings.monthlyExtraordinaryIncome ?? 0,
             rentPlanned: loadedSettings.rentPlanned ?? 0,
             utilitiesPlanned: loadedSettings.utilitiesPlanned ?? 0,
@@ -185,7 +184,7 @@ const Index = () => {
   const cashFlow = calculateCashFlow(currentMonth, movements);
 
   const summary = {
-    openingBalance: (currentMonth.incomeMealCard ?? 0) + (currentMonth.incomeCreditCard ?? 0),
+    openingBalance: (currentMonth.incomeBase ?? 0) + (currentMonth.incomeMealCard ?? 0),
     plannedIncomeTotal: calculatePlannedIncomeTotal(currentMonth),
     plannedOutflowTotal: calculatePlannedOutflows(currentMonth),
     plannedAvailable: calculatePlannedAvailable(currentMonth),
@@ -283,16 +282,11 @@ const Index = () => {
       const incomeExtra = normalizeCurrency(
         settings.monthlyExtraordinaryIncome ?? currentMonth.incomeExtraordinary ?? 0,
       );
-      const creditCard = normalizeCurrency(
-        settings.monthlyCreditCardBalance ?? currentMonth.incomeCreditCard ?? 0,
-      );
-
       const monthDraft: Month = {
         ...currentMonth,
         incomeBase,
         incomeMealCard: mealCard,
         incomeExtraordinary: incomeExtra,
-        incomeCreditCard: creditCard,
       };
 
       if (isSubsidyMonth(monthDraft) && incomeExtra > 0) {
@@ -321,8 +315,7 @@ const Index = () => {
           | 'incomeSalary'
           | 'incomeMealCard'
           | 'incomeExtraordinary'
-          | 'incomeSubsidy'
-          | 'incomeCreditCard',
+          | 'incomeSubsidy',
         amount: number,
         accountToId?: string,
       ) => {
@@ -384,8 +377,6 @@ const Index = () => {
         await upsertIncome('incomeExtraordinary', normalizedMonth.incomeExtraordinary ?? 0, accountMap['current']);
         await upsertIncome('incomeSubsidy', 0, accountMap['current']);
       }
-
-      await upsertIncome('incomeCreditCard', normalizedMonth.incomeCreditCard ?? 0, accountMap['creditCard']);
 
       const [refreshedMovements, refreshedBalances] = await Promise.all([
         db.getAllFromIndex('movements', 'by-month', monthKey),
@@ -488,15 +479,15 @@ const Index = () => {
     }
   }
 
-  async function handleSaveCardFunding(values: { mealCard: number; creditCard: number }) {
+  async function handleSaveCardFunding(values: { incomeBase: number; mealCard: number }) {
     if (!currentMonth) return;
 
     try {
       const db = await getDB();
       const updatedMonth: Month = {
         ...currentMonth,
+        incomeBase: values.incomeBase,
         incomeMealCard: values.mealCard,
-        incomeCreditCard: values.creditCard,
       };
 
       await db.put('months', updatedMonth);
@@ -505,8 +496,8 @@ const Index = () => {
       if (settings) {
         const updatedSettings: AppSettings = {
           ...settings,
+          monthlyIncomeBase: values.incomeBase,
           monthlyMealCardBalance: values.mealCard,
-          monthlyCreditCardBalance: values.creditCard,
           updatedAt: new Date(),
         };
 
@@ -514,20 +505,29 @@ const Index = () => {
         setSettings(updatedSettings);
       }
 
-      const accountsByType = accounts.reduce<Record<string, string>>((acc, account) => {
-        acc[account.type] = account.id;
-        return acc;
-      }, {} as Record<string, string>);
+      const accountsByType = accounts.reduce<Record<Account['type'], string | undefined>>(
+        (acc, account) => {
+          acc[account.type] = account.id;
+          return acc;
+        },
+        {
+          current: undefined,
+          mealCard: undefined,
+          savings: undefined,
+          cryptoCore: undefined,
+          cryptoShit: undefined,
+        },
+      );
 
-      const cardIncomeDate = new Date(updatedMonth.year, updatedMonth.month - 1, 1);
+      const incomeDate = new Date(updatedMonth.year, updatedMonth.month - 1, 1);
 
       const upsertIncomeMovement = async (
-        category: 'incomeMealCard' | 'incomeCreditCard',
+        category: 'incomeSalary' | 'incomeMealCard',
         amount: number,
         accountToId?: string,
       ) => {
         const existing = movements.find(
-          movement =>
+          (movement) =>
             movement.type === 'income' &&
             movement.category === category &&
             movement.monthYear === updatedMonth.year &&
@@ -547,13 +547,13 @@ const Index = () => {
               ...existing,
               amount,
               accountToId,
-              date: existing.date ?? cardIncomeDate,
+              date: existing.date ?? incomeDate,
               updatedAt: new Date(),
             });
           } else {
             const newMovement: Movement = {
               id: generateId(),
-              date: cardIncomeDate,
+              date: incomeDate,
               type: 'income',
               amount,
               category,
@@ -571,20 +571,20 @@ const Index = () => {
         }
       };
 
+      await upsertIncomeMovement('incomeSalary', values.incomeBase, accountsByType['current']);
       await upsertIncomeMovement('incomeMealCard', values.mealCard, accountsByType['mealCard']);
-      await upsertIncomeMovement('incomeCreditCard', values.creditCard, accountsByType['creditCard']);
 
       const refreshedMovements = await db.getAllFromIndex('movements', 'by-month', [updatedMonth.year, updatedMonth.month]);
       setMovements(refreshedMovements);
 
       toast({
-        title: "Cartões atualizados",
+        title: "Recebimentos atualizados",
         description: "Os valores foram registados para este mês.",
       });
     } catch (error) {
       toast({
         title: "Erro",
-        description: "Não foi possível atualizar os cartões.",
+        description: "Não foi possível atualizar os recebimentos.",
         variant: "destructive",
       });
     }
@@ -627,7 +627,6 @@ const Index = () => {
           overrides: {
             incomeBase: settings.monthlyIncomeBase ?? 0,
             mealCard: currentMonth.incomeMealCard ?? settings.monthlyMealCardBalance ?? 0,
-            creditCard: currentMonth.incomeCreditCard ?? settings.monthlyCreditCardBalance ?? 0,
             extraordinaryIncome: settings.monthlyExtraordinaryIncome ?? 0,
           },
         });
@@ -699,8 +698,8 @@ const Index = () => {
       <CardFundingDialog
         open={cardFundingDialogOpen}
         onOpenChange={setCardFundingDialogOpen}
+        defaultBaseAmount={currentMonth.incomeBase ?? 0}
         defaultMealAmount={currentMonth.incomeMealCard ?? 0}
-        defaultCreditAmount={currentMonth.incomeCreditCard ?? 0}
         onSave={handleSaveCardFunding}
       />
     </>

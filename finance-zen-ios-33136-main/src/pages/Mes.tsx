@@ -15,7 +15,7 @@ import {
   ChevronRight,
   Sparkles,
   Plus,
-  CreditCard,
+  Wallet,
   MoreVertical,
   Loader2,
 } from "lucide-react";
@@ -120,7 +120,6 @@ export default function Mes() {
     incomeExtra: 0,
     fixedExpenses: 0,
     foodExpenses: 0,
-    creditCard: 0,
     overrides: {
       savings: 0,
       cryptoCore: 0,
@@ -246,7 +245,6 @@ export default function Mes() {
       incomeExtra: month.subsidyApplied ? month.subsidyAmount ?? 0 : month.incomeExtraordinary ?? 0,
       fixedExpenses: month.actualFixedExpenses ?? month.fixedExpenses ?? 0,
       foodExpenses: month.actualFoodExpenses ?? month.plannedFood ?? month.foodPlanned ?? 0,
-      creditCard: month.incomeCreditCard ?? 0,
       overrides: {
         savings: month.plannedSavings ?? 0,
         cryptoCore: month.plannedCryptoCore ?? 0,
@@ -284,7 +282,6 @@ export default function Mes() {
     incomeExtra: number;
     fixedExpenses: number;
     foodExpenses: number;
-    creditCard?: number;
   };
 
   type PlanOverrides = {
@@ -308,7 +305,6 @@ export default function Mes() {
       incomeExtraordinary: roundTwo(values.incomeExtra),
       actualFixedExpenses: roundTwo(values.fixedExpenses),
       actualFoodExpenses: roundTwo(values.foodExpenses),
-      incomeCreditCard: values.creditCard != null ? roundTwo(values.creditCard) : month.incomeCreditCard,
       lastInputsUpdatedAt: new Date(),
     };
 
@@ -377,10 +373,21 @@ export default function Mes() {
     if (!normalizedMonth) return;
     await db.put('months', normalizedMonth);
 
-    const accountMap = accounts.reduce<Record<string, string>>((acc, account) => {
-      acc[account.type] = account.id;
-      return acc;
-    }, {});
+    const accountMap = accounts.reduce<
+      Record<Account['type'], string | undefined>
+    >(
+      (acc, account) => {
+        acc[account.type] = account.id;
+        return acc;
+      },
+      {
+        current: undefined,
+        mealCard: undefined,
+        savings: undefined,
+        cryptoCore: undefined,
+        cryptoShit: undefined,
+      },
+    );
 
     const monthKey: [number, number] = [normalizedMonth.year, normalizedMonth.month];
     let monthMovements = await db.getAllFromIndex('movements', 'by-month', monthKey);
@@ -390,8 +397,7 @@ export default function Mes() {
         | 'incomeSalary'
         | 'incomeMealCard'
         | 'incomeExtraordinary'
-        | 'incomeSubsidy'
-        | 'incomeCreditCard',
+        | 'incomeSubsidy',
       amount: number,
       accountToId?: string,
     ) => {
@@ -454,8 +460,6 @@ export default function Mes() {
       await upsertIncome('incomeSubsidy', 0, accountMap['current']);
     }
 
-    await upsertIncome('incomeCreditCard', normalizedMonth.incomeCreditCard ?? 0, accountMap['creditCard']);
-
     const [refreshedMovements, refreshedBalances] = await Promise.all([
       db.getAllFromIndex('movements', 'by-month', monthKey),
       db.getAllFromIndex('balances', 'by-month', monthKey),
@@ -515,7 +519,6 @@ export default function Mes() {
           incomeExtra: settings.monthlyExtraordinaryIncome ?? month.incomeExtraordinary ?? 0,
           fixedExpenses: month.actualFixedExpenses ?? month.fixedExpenses ?? settings.fixedExpenses ?? 0,
           foodExpenses: month.actualFoodExpenses ?? month.plannedFood ?? settings.foodPlannedMonthly ?? 0,
-          creditCard: settings.monthlyCreditCardBalance ?? month.incomeCreditCard ?? 0,
         },
         {
           successMessage: {
@@ -748,7 +751,6 @@ export default function Mes() {
           incomeExtra: wizardValues.incomeExtra,
           fixedExpenses: wizardValues.fixedExpenses,
           foodExpenses: wizardValues.foodExpenses,
-          creditCard: wizardValues.creditCard,
         },
         {
           planOverrides: wizardValues.overrides,
@@ -1121,7 +1123,6 @@ export default function Mes() {
         incomeExtra: wizardValues.incomeExtra,
         fixedExpenses: wizardValues.fixedExpenses,
         foodExpenses: wizardValues.foodExpenses,
-        creditCard: wizardValues.creditCard,
       },
       wizardValues.overrides,
     );
@@ -1194,7 +1195,7 @@ export default function Mes() {
             type: 'expense' as const,
             defaults: {
               category: 'shitMoney',
-              accountFromId: accountTypeMap.creditCard ?? accountTypeMap.current,
+              accountFromId: accountTypeMap.current,
             } as MovementDialogDefaults,
           },
         },
@@ -1377,7 +1378,7 @@ export default function Mes() {
                   disabled={isLocked}
                   onClick={() => setCardFundingDialogOpen(true)}
                 >
-                  <CreditCard className="mr-2 h-4 w-4" /> Entrada cartão
+                  <Wallet className="mr-2 h-4 w-4" /> Atualizar recebimentos
                 </Button>
                 <Button
                   type="button"
@@ -1494,19 +1495,6 @@ export default function Mes() {
                   onChange={handleInputChange('incomeBase')}
                   disabled={isLocked}
                 />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="input-credit">Recebido no cartão crédito (€)</Label>
-                <Input
-                  id="input-credit"
-                  type="number"
-                  step="0.01"
-                  value={(month.incomeCreditCard ?? 0).toFixed(2)}
-                  disabled
-                />
-                <p className="text-xs text-muted-foreground">
-                  Ajusta através de “Recebi o mês” ou das definições.
-                </p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="input-meal-card">Recebido no cartão refeição (€)</Label>
@@ -1812,21 +1800,20 @@ export default function Mes() {
       <CardFundingDialog
         open={cardFundingDialogOpen}
         onOpenChange={setCardFundingDialogOpen}
+        defaultBaseAmount={month.incomeBase ?? 0}
         defaultMealAmount={month.incomeMealCard ?? 0}
-        defaultCreditAmount={month.incomeCreditCard ?? 0}
-        onSave={async ({ mealCard, creditCard }) => {
+        onSave={async ({ incomeBase, mealCard }) => {
           await persistMonthInputs(
             {
-              incomeBase: month.incomeBase ?? 0,
+              incomeBase,
               mealCard,
               incomeExtra: month.subsidyApplied ? month.subsidyAmount ?? 0 : month.incomeExtraordinary ?? 0,
               fixedExpenses: month.actualFixedExpenses ?? month.fixedExpenses ?? 0,
               foodExpenses: month.actualFoodExpenses ?? month.plannedFood ?? 0,
-              creditCard,
             },
             {
               successMessage: {
-                title: 'Cartões atualizados',
+                title: 'Recebimentos atualizados',
                 description: 'Recalculámos o plano com os novos saldos.',
               },
             },
@@ -1843,37 +1830,21 @@ export default function Mes() {
             {wizardStep === 0 && (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Introduz o que entrou na tua conta e no cartão de crédito neste início de mês.
+                  Introduz o que entrou na tua conta neste início de mês.
                 </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>Recebido na conta (€)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={wizardValues.incomeBase.toString()}
-                      onChange={(event) =>
-                        setWizardValues((prev) => ({
-                          ...prev,
-                          incomeBase: parseInputValue(event.target.value),
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Carregamento do cartão crédito (€)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={wizardValues.creditCard.toString()}
-                      onChange={(event) =>
-                        setWizardValues((prev) => ({
-                          ...prev,
-                          creditCard: parseInputValue(event.target.value),
-                        }))
-                      }
-                    />
-                  </div>
+                <div className="space-y-1">
+                  <Label>Recebido na conta (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={wizardValues.incomeBase.toString()}
+                    onChange={(event) =>
+                      setWizardValues((prev) => ({
+                        ...prev,
+                        incomeBase: parseInputValue(event.target.value),
+                      }))
+                    }
+                  />
                 </div>
               </div>
             )}

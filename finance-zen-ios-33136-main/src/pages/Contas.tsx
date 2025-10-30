@@ -76,9 +76,8 @@ export default function Contas() {
   }
 
   const accountIcons: Record<string, string> = {
-    current: "💳",
+    current: "💶",
     mealCard: "🍽️",
-    creditCard: "💳",
     savings: "🏦",
     cryptoCore: "₿",
     cryptoShit: "🪙",

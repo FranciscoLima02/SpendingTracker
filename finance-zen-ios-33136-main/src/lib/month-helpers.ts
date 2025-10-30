@@ -23,7 +23,6 @@ export function normalizeMonth(month: Month): Month {
     ...month,
     incomeBase: month.incomeBase ?? 0,
     incomeMealCard: month.incomeMealCard ?? 0,
-    incomeCreditCard: month.incomeCreditCard ?? 0,
     incomeExtraordinary: month.incomeExtraordinary ?? 0,
     subsidyAmount: month.subsidyAmount ?? 0,
     subsidyApplied: month.subsidyApplied ?? false,

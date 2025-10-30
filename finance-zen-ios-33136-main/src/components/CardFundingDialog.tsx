@@ -3,41 +3,40 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 
 interface CardFundingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultBaseAmount: number;
   defaultMealAmount: number;
-  defaultCreditAmount: number;
-  onSave: (values: { mealCard: number; creditCard: number }) => Promise<void>;
+  onSave: (values: { incomeBase: number; mealCard: number }) => Promise<void>;
 }
 
 export function CardFundingDialog({
   open,
   onOpenChange,
+  defaultBaseAmount,
   defaultMealAmount,
-  defaultCreditAmount,
   onSave,
 }: CardFundingDialogProps) {
+  const [baseAmount, setBaseAmount] = useState<string>("0");
   const [mealAmount, setMealAmount] = useState<string>("0");
-  const [creditAmount, setCreditAmount] = useState<string>("0");
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
+      setBaseAmount(defaultBaseAmount.toString());
       setMealAmount(defaultMealAmount.toString());
-      setCreditAmount(defaultCreditAmount.toString());
     }
-  }, [open, defaultMealAmount, defaultCreditAmount]);
+  }, [open, defaultBaseAmount, defaultMealAmount]);
 
   const handleSubmit = async () => {
+    const parsedBase = parseFloat(baseAmount) || 0;
     const parsedMeal = parseFloat(mealAmount) || 0;
-    const parsedCredit = parseFloat(creditAmount) || 0;
 
     setIsSaving(true);
     try {
-      await onSave({ mealCard: parsedMeal, creditCard: parsedCredit });
+      await onSave({ incomeBase: parsedBase, mealCard: parsedMeal });
       onOpenChange(false);
     } finally {
       setIsSaving(false);
@@ -48,10 +47,22 @@ export function CardFundingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Atualizar recargas dos cartões</DialogTitle>
+          <DialogTitle>Atualizar recebimentos do mês</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="base-income-amount">Recebido na conta (€)</Label>
+            <Input
+              id="base-income-amount"
+              type="number"
+              step="0.01"
+              min="0"
+              value={baseAmount}
+              onChange={(event) => setBaseAmount(event.target.value)}
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="meal-card-amount">Cartão de refeição (€)</Label>
             <Input
@@ -64,23 +75,9 @@ export function CardFundingDialog({
             />
           </div>
 
-          <Separator />
-
-          <div className="space-y-2">
-            <Label htmlFor="credit-card-amount">Cartão de crédito (€)</Label>
-            <Input
-              id="credit-card-amount"
-              type="number"
-              step="0.01"
-              min="0"
-              value={creditAmount}
-              onChange={(event) => setCreditAmount(event.target.value)}
-            />
-          </div>
-
           <p className="text-xs text-muted-foreground">
-            Define aqui os valores que recebeste este mês. A app atualiza os movimentos
-            de entrada e o resumo automaticamente.
+            Define aqui os valores que recebeste este mês. A app atualiza os movimentos de
+            entrada e o resumo automaticamente.
           </p>
         </div>
 

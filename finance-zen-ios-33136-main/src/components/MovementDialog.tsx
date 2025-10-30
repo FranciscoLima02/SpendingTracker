@@ -36,7 +36,6 @@ const categories = {
     { value: 'incomeSalary', label: 'Rendimento Base' },
     { value: 'incomeSubsidy', label: 'Subsídio (Jun/Dez)' },
     { value: 'incomeMealCard', label: 'Cartão Refeição' },
-    { value: 'incomeCreditCard', label: 'Cartão de Crédito' },
     { value: 'incomeExtraordinary', label: 'Entrada Extraordinária' },
   ],
   expense: [

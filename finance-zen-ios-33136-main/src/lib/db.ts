@@ -7,7 +7,6 @@ export interface AppSettings {
   baseCurrency: string;
   monthlyIncomeBase: number;
   monthlyMealCardBalance: number;
-  monthlyCreditCardBalance: number;
   monthlyExtraordinaryIncome: number;
   fixedExpenses: number;
   foodSeparate: boolean;
@@ -48,7 +47,6 @@ export interface Month {
   closedAt?: Date;
   incomeBase: number;
   incomeMealCard: number;
-  incomeCreditCard: number;
   incomeExtraordinary: number;
   subsidyDistributionSavings?: number;
   subsidyDistributionCore?: number;
@@ -85,7 +83,7 @@ export interface Month {
 
 export interface Account {
   id: string;
-  type: 'current' | 'mealCard' | 'creditCard' | 'savings' | 'cryptoCore' | 'cryptoShit';
+  type: 'current' | 'mealCard' | 'savings' | 'cryptoCore' | 'cryptoShit';
   name: string;
   isActive: boolean;
   createdAt: Date;
@@ -199,7 +197,6 @@ export async function initializeDefaultData() {
     baseCurrency: 'EUR',
     monthlyIncomeBase: 1168,
     monthlyMealCardBalance: 210,
-    monthlyCreditCardBalance: 300,
     monthlyExtraordinaryIncome: 0,
     fixedExpenses: rentPlanned + utilitiesPlanned + subscriptionsPlanned,
     foodSeparate: false,
@@ -267,7 +264,6 @@ export async function initializeDefaultData() {
   const requiredAccounts: Array<Pick<Account, 'type' | 'name'>> = [
     { type: 'current', name: 'Conta' },
     { type: 'mealCard', name: 'Cartão Refeição' },
-    { type: 'creditCard', name: 'Cartão Crédito' },
     { type: 'savings', name: 'Poupança' },
     { type: 'cryptoCore', name: 'Crypto Core' },
     { type: 'cryptoShit', name: 'Crypto Shit' },
@@ -295,7 +291,6 @@ export async function initializeDefaultData() {
 interface CreateMonthOverrides {
   incomeBase?: number;
   mealCard?: number;
-  creditCard?: number;
   extraordinaryIncome?: number;
 }
 
@@ -320,7 +315,6 @@ export async function createMonthWithDefaults({
 
   const incomeBase = overrides?.incomeBase ?? settings.monthlyIncomeBase ?? 0;
   const incomeMealCard = overrides?.mealCard ?? settings.monthlyMealCardBalance ?? 0;
-  const incomeCreditCard = overrides?.creditCard ?? settings.monthlyCreditCardBalance ?? 0;
   const incomeExtraordinary = overrides?.extraordinaryIncome ?? settings.monthlyExtraordinaryIncome ?? 0;
 
   const monthRecord: Month = {
@@ -330,7 +324,6 @@ export async function createMonthWithDefaults({
     isClosed: false,
     incomeBase,
     incomeMealCard,
-    incomeCreditCard,
     incomeExtraordinary,
     subsidyDistributionSavings: settings.distributionSubsidySavings ?? 0,
     subsidyDistributionCore: settings.distributionSubsidyCore ?? 0,
@@ -382,19 +375,28 @@ export async function createMonthWithDefaults({
     await db.put('balances', balance);
   }
 
-  const accountsByType = accounts.reduce<Record<string, string>>((acc, account) => {
-    acc[account.type] = account.id;
-    return acc;
-  }, {});
+  const accountsByType = accounts.reduce<
+    Record<Account['type'], string | undefined>
+  >(
+    (acc, account) => {
+      acc[account.type] = account.id;
+      return acc;
+    },
+    {
+      current: undefined,
+      mealCard: undefined,
+      savings: undefined,
+      cryptoCore: undefined,
+      cryptoShit: undefined,
+    },
+  );
 
   const defaultAccountId = accountsByType['current'] ?? accounts[0]?.id;
-  const creditCardAccountId = accountsByType['creditCard'];
 
   const payday = settings.paydayDayOfMonth ? Math.min(Math.max(settings.paydayDayOfMonth, 1), 28) : 1;
   const incomeDate = new Date(year, month - 1, payday);
   const baseMovementDates = {
     mealCard: new Date(year, month - 1, 1),
-    creditCard: new Date(year, month - 1, 1),
     extraordinary: new Date(year, month - 1, 20),
     rent: new Date(year, month - 1, 2),
     shitMoney: new Date(year, month - 1, 3),
@@ -438,22 +440,6 @@ export async function createMonthWithDefaults({
     });
   }
 
-  if (incomeCreditCard > 0 && creditCardAccountId) {
-    movements.push({
-      id: generateId(),
-      date: baseMovementDates.creditCard,
-      type: 'income',
-      amount: incomeCreditCard,
-      category: 'incomeCreditCard',
-      accountToId: creditCardAccountId,
-      isSubsidyTagged: false,
-      monthYear: year,
-      monthMonth: month,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-  }
-
   if (incomeExtraordinary > 0 && defaultAccountId) {
     movements.push({
       id: generateId(),
@@ -487,15 +473,15 @@ export async function createMonthWithDefaults({
     });
   }
 
-  const pushCreditExpense = (category: 'rent' | 'shitMoney', amount: number, date: Date) => {
-    if (!creditCardAccountId || amount <= 0) return;
+  const pushBaseExpense = (category: 'rent' | 'shitMoney', amount: number, date: Date) => {
+    if (!defaultAccountId || amount <= 0) return;
     movements.push({
       id: generateId(),
       date,
       type: 'expense',
       amount,
       category,
-      accountFromId: creditCardAccountId,
+      accountFromId: defaultAccountId,
       isSubsidyTagged: false,
       monthYear: year,
       monthMonth: month,
@@ -504,16 +490,16 @@ export async function createMonthWithDefaults({
     });
   };
 
-  pushCreditExpense('rent', settings.rentPlanned ?? 0, baseMovementDates.rent);
-  pushCreditExpense('shitMoney', settings.shitMoneyPlanned ?? 0, baseMovementDates.shitMoney);
+  pushBaseExpense('rent', settings.rentPlanned ?? 0, baseMovementDates.rent);
+  pushBaseExpense('shitMoney', settings.shitMoneyPlanned ?? 0, baseMovementDates.shitMoney);
 
-  const pushCreditTransfer = (
+  const pushBaseTransfer = (
     category: 'transferenciaPoupanca' | 'compraCryptoCore' | 'compraCryptoShit',
     amount: number,
     targetType: 'savings' | 'cryptoCore' | 'cryptoShit',
     date: Date,
   ) => {
-    if (!creditCardAccountId || amount <= 0) return;
+    if (!defaultAccountId || amount <= 0) return;
     const accountToId = accountsByType[targetType];
     if (!accountToId) return;
 
@@ -523,7 +509,7 @@ export async function createMonthWithDefaults({
       type: 'transfer',
       amount,
       category,
-      accountFromId: creditCardAccountId,
+      accountFromId: defaultAccountId,
       accountToId,
       isSubsidyTagged: false,
       monthYear: year,
@@ -533,9 +519,9 @@ export async function createMonthWithDefaults({
     });
   };
 
-  pushCreditTransfer('transferenciaPoupanca', settings.savingsPlanned ?? 0, 'savings', baseMovementDates.savings);
-  pushCreditTransfer('compraCryptoCore', settings.cryptoCorePlanned ?? 0, 'cryptoCore', baseMovementDates.cryptoCore);
-  pushCreditTransfer('compraCryptoShit', settings.cryptoShitPlanned ?? 0, 'cryptoShit', baseMovementDates.cryptoShit);
+  pushBaseTransfer('transferenciaPoupanca', settings.savingsPlanned ?? 0, 'savings', baseMovementDates.savings);
+  pushBaseTransfer('compraCryptoCore', settings.cryptoCorePlanned ?? 0, 'cryptoCore', baseMovementDates.cryptoCore);
+  pushBaseTransfer('compraCryptoShit', settings.cryptoShitPlanned ?? 0, 'cryptoShit', baseMovementDates.cryptoShit);
 
   for (const movement of movements) {
     await db.put('movements', movement);
