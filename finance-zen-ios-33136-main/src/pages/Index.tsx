@@ -204,15 +204,52 @@ const Index = () => {
   };
 
   async function handleSaveMovement(movement: Partial<Movement>) {
+    if (!currentMonth) {
+      toast({
+        title: "Sem mês selecionado",
+        description: "Seleciona um mês ativo antes de registares movimentos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!movement.type || movement.amount == null) {
+      toast({
+        title: "Dados em falta",
+        description: "Garante que definiste o tipo e o valor do movimento.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const db = await getDB();
-      const newMovement: Movement = {
-        id: generateId(),
+      const referenceDate = movement.date ? new Date(movement.date) : new Date();
+      const monthYear = movement.monthYear ?? referenceDate.getFullYear();
+      const monthMonth = movement.monthMonth ?? referenceDate.getMonth() + 1;
+
+      const normalizedMovement: Movement = {
         ...movement,
+        id: generateId(),
+        date: referenceDate,
+        monthYear,
+        monthMonth,
+        createdAt: movement.createdAt ?? new Date(),
+        updatedAt: new Date(),
+        isSubsidyTagged: movement.isSubsidyTagged ?? false,
       } as Movement;
 
-      await db.put('movements', newMovement);
-      setMovements((prev) => [...prev, newMovement]);
+      await db.put('movements', normalizedMovement);
+
+      if (monthYear === currentMonth.year && monthMonth === currentMonth.month) {
+        const [refreshedMovements, refreshedBalances] = await Promise.all([
+          db.getAllFromIndex('movements', 'by-month', [monthYear, monthMonth]),
+          db.getAllFromIndex('balances', 'by-month', [monthYear, monthMonth]),
+        ]);
+
+        setMovements(refreshedMovements);
+        setBalances(refreshedBalances);
+      }
 
       toast({
         title: "Movimento adicionado",
