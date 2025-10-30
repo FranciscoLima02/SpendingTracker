@@ -9,6 +9,7 @@ import {
   PlusCircle,
   Lock,
   Unlock,
+  Trash2,
 } from "lucide-react";
 import {
   getDB,
@@ -17,6 +18,7 @@ import {
   Account,
   AppSettings,
   createMonthWithDefaults,
+  initializeDefaultData,
 } from "@/lib/db";
 import {
   applyDistributionToMonth,
@@ -80,6 +82,7 @@ export default function Mes() {
   const [isHydratingMonth, setIsHydratingMonth] = useState(false);
   const [isCreatingMonth, setIsCreatingMonth] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [isDeletingMonth, setIsDeletingMonth] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -105,6 +108,7 @@ export default function Mes() {
   async function bootstrap(targetId?: string) {
     setIsLoading(true);
     try {
+      await initializeDefaultData();
       const db = await getDB();
       const [rawMonths, allAccounts, loadedSettings] = await Promise.all([
         db.getAll('months'),
@@ -543,6 +547,70 @@ export default function Mes() {
     }
   }
 
+  async function handleDeleteMonth() {
+    if (!month) return;
+
+    const monthLabel = format(new Date(month.year, month.month - 1), "MMMM yyyy", { locale: pt });
+    const firstConfirm = window.confirm(
+      `Tens a certeza que queres apagar o mês de ${monthLabel}? Todos os movimentos e saldos associados serão removidos.`,
+    );
+    if (!firstConfirm) return;
+
+    const secondConfirm = window.confirm('Esta ação é irreversível. Confirma que queres mesmo apagar este mês.');
+    if (!secondConfirm) return;
+
+    setIsDeletingMonth(true);
+    try {
+      const db = await getDB();
+      const monthKey: [number, number] = [month.year, month.month];
+      const [monthBalances, monthMovements] = await Promise.all([
+        db.getAllFromIndex('balances', 'by-month', monthKey),
+        db.getAllFromIndex('movements', 'by-month', monthKey),
+      ]);
+
+      const tx = db.transaction(['months', 'balances', 'movements'], 'readwrite');
+      await tx.objectStore('months').delete(month.id);
+      const balancesStore = tx.objectStore('balances');
+      for (const balance of monthBalances) {
+        await balancesStore.delete(balance.id);
+      }
+      const movementsStore = tx.objectStore('movements');
+      for (const movement of monthMovements) {
+        await movementsStore.delete(movement.id);
+      }
+      await tx.done;
+
+      const remaining = sortMonthsDesc(months.filter((item) => item.id !== month.id));
+      setMonths(remaining);
+
+      if (remaining.length > 0) {
+        const fallback = remaining[0];
+        setSelectedMonthId(fallback.id);
+        setMonth(null);
+        setMovements([]);
+        await hydrateMonth(fallback.id, fallback);
+      } else {
+        setSelectedMonthId(null);
+        setMonth(null);
+        setMovements([]);
+      }
+
+      toast({
+        title: 'Mês apagado',
+        description: `${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)} foi removido com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Falha ao apagar mês', error);
+      toast({
+        title: 'Erro ao apagar mês',
+        description: 'Não foi possível remover o mês selecionado. Tenta novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeletingMonth(false);
+    }
+  }
+
   const monthDistribution = useMemo(
     () => (month ? calculateMonthDistribution(month) : EMPTY_MONTH_DISTRIBUTION),
     [month],
@@ -639,6 +707,15 @@ export default function Mes() {
             >
               {isLocked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
               {isTogglingStatus ? 'A processar…' : isLocked ? 'Reabrir mês' : 'Fechar mês'}
+            </Button>
+            <Button
+              onClick={handleDeleteMonth}
+              disabled={isDeletingMonth}
+              variant="destructive"
+              className="w-full sm:w-auto"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {isDeletingMonth ? 'A apagar…' : 'Apagar mês'}
             </Button>
           </div>
         </div>

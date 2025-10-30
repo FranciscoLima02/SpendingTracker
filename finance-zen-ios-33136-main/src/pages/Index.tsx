@@ -36,7 +36,7 @@ import {
   EMPTY_MONTH_DISTRIBUTION,
   EMPTY_BUCKET_SUMMARY,
 } from "@/lib/calculations";
-import { getNextMonth, normalizeMonthOrNull } from "@/lib/month-helpers";
+import { getNextMonth, normalizeMonth, normalizeMonthOrNull } from "@/lib/month-helpers";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -342,7 +342,9 @@ const Index = () => {
         isClosed: true,
         closedAt: new Date(),
       };
-      await db.put('months', closedMonth);
+      const normalizedClosed = normalizeMonth(closedMonth);
+      await db.put('months', normalizedClosed);
+      setCurrentMonth(normalizedClosed);
 
       const { year: nextYear, month: nextMonthNumber } = getNextMonth(currentMonth.year, currentMonth.month);
 
@@ -364,7 +366,7 @@ const Index = () => {
         });
       }
 
-      const hydratedNextMonth = normalizeMonthData(nextMonth);
+      const hydratedNextMonth = normalizeMonthOrNull(nextMonth ?? null);
       if (!hydratedNextMonth) {
         throw new Error('Falha ao criar o próximo mês');
       }
