@@ -37,6 +37,7 @@ import {
   sumRecord,
   calculateMonthDistribution,
   isSubsidyMonth,
+  EMPTY_MONTH_DISTRIBUTION,
 } from "@/lib/calculations";
 import { normalizeMonth, getNextMonth } from "@/lib/month-helpers";
 import { Button } from "@/components/ui/button";
@@ -542,6 +543,11 @@ export default function Mes() {
     }
   }
 
+  const monthDistribution = useMemo(
+    () => (month ? calculateMonthDistribution(month) : EMPTY_MONTH_DISTRIBUTION),
+    [month],
+  );
+
   if ((isLoading || isHydratingMonth) && !month) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background pb-20">
@@ -572,8 +578,6 @@ export default function Mes() {
   const isLocked = month.isClosed;
   const monthName = format(new Date(month.year, month.month - 1), "MMMM yyyy", { locale: pt });
   const monthNameFormatted = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-
-  const monthDistribution = useMemo(() => calculateMonthDistribution(month), [month]);
   const plannedIncome = calculatePlannedIncome(month);
   const actualIncome = calculateActualIncome(movements);
   const plannedExpenses = calculatePlannedExpenses(month);
