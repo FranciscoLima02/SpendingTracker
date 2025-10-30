@@ -471,8 +471,8 @@ export default function Mes() {
         title: 'Entradas do mês atualizadas',
         description: 'Recalculámos as metas e saldos automaticamente.',
       },
-    );
-  }
+  );
+}
 
   async function handleSaveInputs() {
     try {
@@ -2026,3 +2026,4 @@ export default function Mes() {
       </Dialog>
     </>
   );
+}
