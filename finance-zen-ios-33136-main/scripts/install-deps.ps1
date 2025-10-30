@@ -141,6 +141,14 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
 }
 
 $projectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+$packageJsonPath = Join-Path $projectRoot 'package.json'
+if (-not (Test-Path $packageJsonPath)) {
+  Write-Host "❌ Não encontrámos o ficheiro package.json ao lado do script." -ForegroundColor Red
+  Write-Host "   Confirma que extraíste/clonaste o projeto completo e que estás a executar o script a partir da pasta 'scripts'."
+  Write-Host "   Exemplo: powershell -ExecutionPolicy Bypass -File C:/caminho/para/finance-zen-ios-33136-main/scripts/install-deps.ps1"
+  exit 1
+}
+
 Push-Location $projectRoot
 
 try {

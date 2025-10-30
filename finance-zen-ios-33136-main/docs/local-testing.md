@@ -14,9 +14,10 @@ O script verifica se tens Homebrew ou nvm, instala o Node LTS (ou usa o Bun caso
 
 ### Windows
 
-Abre o PowerShell (de preferência como administrador) e executa:
+Abre o PowerShell (de preferência como administrador), navega até à pasta do projeto e executa:
 
 ```powershell
+cd C:\Users\oTeuUtilizador\Downloads\finance-zen-ios-33136-main
 powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1
 ```
 
@@ -107,6 +108,7 @@ Isso serve os ficheiros otimizados em `http://localhost:4173/`, que é a mesma v
 | `zsh: command not found: npm` | Node não instalado ou sessão antiga | Instala via Brew/nvm ou reabre o terminal. Com nvm, confirma que `source ~/.zshrc` correu. |
 | `winget : The term 'winget' is not recognized` | Windows sem App Installer atualizado | Instala o App Installer pela Microsoft Store ou usa as opções Chocolatey/nvm-windows. |
 | `npm : The term 'npm' is not recognized` | PowerShell não foi reiniciado após instalar o Node | Abre uma nova janela do terminal ou corre `powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1` para atualizar o PATH. |
+| `The argument '.\scripts\install-deps.ps1' to the -File parameter does not exist` | Estás noutra pasta que não contém o projeto | Verifica onde extraíste/clonaste a app e corre `cd C:\...\finance-zen-ios-33136-main` antes de executares o comando. |
 | Erro ao instalar dependências nativas do Capacitor | `pod`/Xcode não configurados | Instala o Xcode completo e corre `sudo xcode-select --switch /Applications/Xcode.app`. |
 | Site abre mas está vazio | Cache antigo do IndexedDB | No browser, abre DevTools → Application → Storage e limpa o IndexedDB, ou corre `localStorage.clear()` no console. |
 
