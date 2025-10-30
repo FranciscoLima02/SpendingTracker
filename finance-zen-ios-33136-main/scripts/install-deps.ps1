@@ -64,6 +64,28 @@ function Invoke-Process {
   }
 }
 
+function Use-NvmIfAvailable {
+  if (-not (Get-Command nvm -ErrorAction SilentlyContinue)) {
+    return $false
+  }
+
+  Write-Host "🔄 A instalar Node LTS via nvm..."
+  try {
+    Invoke-Process -Exe 'nvm' -Args @('install', 'lts') -ErrorMessage "nvm não conseguiu instalar o Node LTS"
+    Invoke-Process -Exe 'nvm' -Args @('use', 'lts') -ErrorMessage "nvm não conseguiu ativar o Node LTS"
+    Add-NodePaths
+    if ((Get-Command node -ErrorAction SilentlyContinue) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+      Write-Host "✅ Node.js e npm preparados via nvm."
+      return $true
+    }
+  }
+  catch {
+    Write-Host "⚠️  $($_.Exception.Message)" -ForegroundColor Yellow
+  }
+
+  return $false
+}
+
 function Ensure-Node {
   if ((Get-Command node -ErrorAction SilentlyContinue) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
     Write-Host "✅ Node.js e npm já estão disponíveis."
@@ -74,6 +96,10 @@ function Ensure-Node {
 
   if ((Get-Command node -ErrorAction SilentlyContinue) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
     Write-Host "✅ Node.js e npm ficaram disponíveis após atualizar o PATH da sessão."
+    return
+  }
+
+  if (Use-NvmIfAvailable) {
     return
   }
 
@@ -102,6 +128,10 @@ function Ensure-Node {
   }
 
   if (-not $installedWith) {
+    if (Use-NvmIfAvailable) {
+      return
+    }
+
     Write-Host "❌ Não encontrámos winget nem Chocolatey para instalar o Node automaticamente."
     Write-Host "   Faz o download manual em https://nodejs.org/pt/download ou instala nvm-windows (https://github.com/coreybutler/nvm-windows)."
     throw "NodeInstallUnavailable"
@@ -111,6 +141,10 @@ function Ensure-Node {
 
   if ((Get-Command node -ErrorAction SilentlyContinue) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
     Write-Host "✅ Node.js e npm instalados com sucesso via $installedWith."
+    return
+  }
+
+  if (Use-NvmIfAvailable) {
     return
   }
 

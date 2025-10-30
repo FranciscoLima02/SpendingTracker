@@ -109,7 +109,7 @@ Se quiseres apenas experimentar as automatizações e o fluxo de orçamento sem 
 
 > 🤖 **Preferes automatizar no Mac?** Corre `./scripts/install-deps.sh` e o script instala o Node (via Homebrew ou nvm), executa `npm install`/`bun install` e, se detetar conflitos, repete automaticamente com `--legacy-peer-deps` antes de te deixar pronto para `npm run dev`.
 >
-> 🪟 **No Windows?** Abre o PowerShell, navega até à pasta do projeto (por exemplo `cd C:\Users\oTeuUtilizador\Downloads\finance-zen-ios-33136-main`) e só depois corre `powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1`. O assistente tenta instalar o Node via `winget` (ou Chocolatey), volta a atualizar o PATH da sessão, e depois executa `npm install` com fallback automático para `--legacy-peer-deps`. Se `npm` não aparecer mas tiveres Bun instalado, ele usa `bun install` e indica que deves arrancar com `bun dev`.
+> 🪟 **No Windows?** Abre o PowerShell, navega até à pasta do projeto (por exemplo `cd C:\Users\oTeuUtilizador\Downloads\finance-zen-ios-33136-main`) e só depois corre `powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1`. O assistente tenta instalar o Node via `winget` (com fallback para Chocolatey ou `nvm-windows` se o tiveres instalado), volta a atualizar o PATH da sessão, e depois executa `npm install` com fallback automático para `--legacy-peer-deps`. Se `npm` não aparecer mas tiveres Bun instalado, ele usa `bun install` e indica que deves arrancar com `bun dev`.
 
 ### 1. Testar diretamente via Lovable (mais rápido)
 
@@ -164,7 +164,7 @@ Quando o Vite arrancar, mostra um endereço `http://localhost:5173/`. Se quisere
 
 ### 2.1. Correr localmente no Windows (modo desenvolvimento)
 
-> 📦 **Queres automatizar tudo?** Garante primeiro que estás dentro da pasta do projeto (`cd C:\...\finance-zen-ios-33136-main`) e só depois corre `powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1`. O assistente instala o Node via `winget` (com fallback para Chocolatey), atualiza o PATH e executa `npm install`, repetindo automaticamente com `--legacy-peer-deps` se for necessário. Se preferires seguir manualmente, usa os passos abaixo.
+> 📦 **Queres automatizar tudo?** Garante primeiro que estás dentro da pasta do projeto (`cd C:\...\finance-zen-ios-33136-main`) e só depois corre `powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1`. O assistente instala o Node via `winget` (com fallback para Chocolatey ou `nvm-windows` quando disponível), atualiza o PATH e executa `npm install`, repetindo automaticamente com `--legacy-peer-deps` se for necessário. Se preferires seguir manualmente, usa os passos abaixo.
 
 1. **Instala o Node LTS** pela tua ferramenta favorita:
    - **winget (recomendado)**
