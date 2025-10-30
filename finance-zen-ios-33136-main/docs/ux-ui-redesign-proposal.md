@@ -1,178 +1,132 @@
-# Finance Zen UX/UI Redesign Proposal
+# Finance Zen Compact Experience Blueprint
 
-## Vision
-Finance Zen becomes a calm, offline-first money coach that feels native on iPhone yet scales elegantly to desktop. Every screen answers two questions instantly: *Where does my money stand right now?* and *What should I do next?* The experience eliminates bookkeeping friction, celebrates healthy habits, and keeps all data on-device so users maintain full control.
-
----
-
-## Guiding Principles
-1. **One-look clarity** – Critical balances, remaining budget, and next actions are always visible without scrolling.
-2. **One-tap actions** – The primary flows (log movement, fund cards, close month) require no more than a single prominent tap to start and three decisions or fewer to finish.
-3. **Predictable structure** – Consistent component hierarchy, typography, and spacing establish muscle memory across screens.
-4. **Transparent finance logic** – Every calculation can be inspected and edited, with tooltips exposing formulas and data sources.
-5. **Offline assurance** – IndexedDB (with optional JSON export) stores everything locally; the UI never suggests an online dependency.
+## North Star
+Finance Zen becomes a pocket-sized money cockpit: one glance tells the whole story, one tap records the next move. Every surface favors calm clarity, lightning-fast capture, and transparent financial logic while remaining 100% offline.
 
 ---
 
-## Reimagined Experience (Screen by Screen)
-### 1. Welcome & Onboarding
-- **Screen 1: Calm welcome** featuring succinct promise (“Clarity every month”) and CTA "Start my plan".
-- **Screen 2: Accounts snapshot** collects starting balances via sliders for Credit Card, Meal Card, Cash, Savings. Inline copy shows why each matters.
-- **Screen 3: Obligations checklist** pre-fills recurring outflows (Rent, Savings transfer, Crypto allocations, Shit Money allowance) with editable defaults.
-- **Screen 4: Plan confirmation** summarises cash flow outlook and savings goal progress, with “Activate month” primary button.
+## Navigation & Layout Hierarchy
+1. **Monthly Workspace (default screen)**
+   - **Sticky command header** (48px): current month selector (horizontal pill carousel), `Open Month` / `Close Month` smart button, last sync timestamp.
+   - **Hero summary bar**: four quick stats with emoji anchors—`💶 Left to Spend`, `💰 Saved this Month`, `🪙 Crypto Balance`, `🍽 Meal Card`. Each stat is pressable to reveal detail sheets.
+   - **Action dock** (bottom on mobile, right rail on desktop): `+ Expense`, `+ Income`, `Transfer`, `Fund Cards`. Buttons remember last-used category/account and pre-fill amounts.
+   - **Insight grid** (two-column cards on desktop, accordion on mobile):
+     1. **Plan vs. Actual strip** – essentials vs lifestyle vs investing progress bars with color-coded caps (green/on track, amber/at risk, red/over).
+     2. **Savings trajectory** – inline sparkline showing last 6 months plus projected month-end.
+     3. **Upcoming obligations** – collapsible list auto-filled from recurring movements happening in next 7 days.
+   - **Activity table-card**: compact table with columns `Date`, `Category`, `Account`, `Amount`, `Status`. Inline edit icon opens quick editor. Collapsible to show last 5 vs full month.
+   - **Monthly checklist** (foot) – `Card top-ups`, `Rent locked`, `Close review`. Each item flips to green when complete; tapping opens the relevant flow.
 
-### 2. Dashboard (Default Landing)
-- **Sticky status header**: remaining days, net cash flow, % essentials vs lifestyle, and quick celebratory microcopy (e.g., “Savings on track +€120”).
-- **Monthly checklist card** (collapsible) prompting any pending onboarding tasks or reviews.
-- **Action dock** (mobile bottom sheet / desktop right rail) with three primary buttons: `Log Movement`, `Fund Cards`, `Close Month`.
-- **Spending overview**: segmented ring showing Essentials, Lifestyle, Investing; tapping reveals detail cards.
-- **Timeline feed**: chronological list of movements with badges for category, account, and variance vs. plan.
-- **Insights rail**: mini cards for Savings vs. Goal, Buffer health, Credit card payoff projection.
+2. **History Drawer** (from header or swipe up): horizontal month scroller with mini-summary chips (`Net Saved`, `Variance`). Selecting a month loads its frozen dashboard in read-only mode.
 
-### 3. Log Movement Flow
-- Single bottom sheet with segmented control for Income / Expense / Transfer.
-- Progressive disclosure: selecting Expense reveals category chips (Rent, Food, Lazer, Crypto-Core, Crypto-Shit, Buffer, Transport, Health, Subscriptions, Other) plus quick-fill amounts from recent history.
-- Confirmation screen shows resulting balances for affected accounts before saving.
-
-### 4. Fund Cards Flow
-- Short two-step sheet: Step 1 displays last month’s top-up and suggested amount based on plan. Step 2 confirms credit to Meal Card and Credit Card simultaneously, illustrating leftover salary.
-- When saved, a success toast indicates updated balances and invites logging of the month’s first purchase.
-
-### 5. Monthly Review & Close
-- Celebratory summary card with confetti (respecting reduced motion) stating cash flow delta and savings achievements.
-- Breakdown tables: Planned vs Actual for each category, plus highlight chips (“You underspent on Food by 12%”).
-- Actions: `Roll over surplus`, `Move to savings`, or `Reset to zero` per account.
-
-### 6. History & Trends
-- Calendar heatmap for monthly surplus/deficit.
-- Trend lines for Savings growth, Lifestyle spend, and Card utilization.
-- Export button for JSON backup (offline compliant).
-
-### 7. Settings & Transparency
-- Preference toggles for currency, language, motion, biometric unlock.
-- Formula browser listing each metric with editable parameters and “View calculation” modal referencing underlying movements.
+3. **Settings & Formulas** (secondary tab): simplified sections for targets, categories, automation rules, export/import JSON.
 
 ---
 
-## Visual System & Layout
-### Palette
-| Role | Color | Notes |
-| --- | --- | --- |
-| Background | `#10131A` | Deep navy charcoal to reduce glare |
-| Surface | `#1B222C` | Cards, sheets, drawers |
-| Primary accent | Gradient `#5BE7C4 → #4D7CFE` | Actions, progress bars |
-| Positive state | `#6BEFA3` | Savings wins, confirmations |
-| Caution state | `#FFB86C` | Upcoming bills, buffer alerts |
-| Critical | `#FF6B6B` | Over-budget warnings |
-| Text (primary/secondary) | `#F5F9FF` / `#A7B4CC` | High contrast, accessible |
-
-### Typography
-- **Family**: Inter (system-friendly and available via web).
-- **Hierarchy**: H1 28/34 bold, H2 22/28 semibold, body 16/24 regular, caption 14/20 medium.
-- **Numeric styling**: Tabular figures for all currency values; decimals aligned vertically.
-
-### Grid & Spacing
-- Base unit 8px; key rhythm 24px for sections, 16px for card padding, 12px for element spacing.
-- Mobile: single column with sticky header + dock. Desktop: responsive two-column layout, 320px insights rail.
-
-### Iconography & Illustrations
-- Rounded duotone icons (teal/indigo). Onboarding uses simple geometric illustrations echoing currency symbols.
+## Compact Monthly Dashboard Design
+- **Above-the-fold completeness**: all mission-critical stats appear without scroll on 390px tall viewport.
+- **Card anatomy**: 16px radius, 12px padding, 8px internal spacing, max 3 data points per card.
+- **Collapsible groups**: `Essentials`, `Lifestyle`, `Investing`, `Buffer` categories share a stacked accordion. Default state shows totals; expand reveals member categories with progress chips (e.g., `Food €120 / €250`).
+- **Variance tokens**: right edge of each category row shows pill `+€35` or `–€20` with contextual color.
+- **Adaptive typography**: numeric values use 20px tabular figures, labels 13px uppercase tracking 4% for scanability.
 
 ---
 
-## Financial Architecture
-### Core Entities
-- **Account**: `id`, `name`, `type` (`credit`, `meal`, `cash`, `savings`, `crypto-core`, `crypto-shit`, `buffer`), `balance`, `limit` (optional).
-- **Category Bucket**: `id`, `label`, `classification` (`essential`, `lifestyle`, `investment`, `buffer`), `defaultPlan` amount, `accountSource` (default funding account).
-- **Monthly Plan**: `id`, `month`, `year`, references to `plannedInflow`, `plannedOutflow`, `plannedSavings`, `cardTopUps`, `targets` per category.
-- **Movement**: `id`, `date`, `accountFrom`, `accountTo`, `category`, `amount`, `type`, `notes`, `isPlanned` flag.
-- **Indicator Snapshot**: stored summary per month of calculated metrics for quick rendering.
-
-### Key Formulas
-- **Planned Income** = `Σ(defaultPlan.income)` + `cardTopUps.credit + cardTopUps.meal` + `extraInflow`.
-- **Planned Essentials Spend** = `Σ(category.classification == essential ? targetAmount : 0)`.
-- **Planned Lifestyle Spend** = `Σ(classification == lifestyle ? targetAmount : 0)`.
-- **Savings Target** = `plannedSavings + plannedTransfersToSavings`.
-- **Actual Spend by Category** = `Σ(movement.type == expense && movement.category == category)`.
-- **Variance** = `actual - planned` (per category and totals).
-- **Essential Spend Ratio** = `actualEssentials / actualIncome`.
-- **Lifestyle Spend Ratio** = `actualLifestyle / actualIncome`.
-- **Savings Completion** = `(actualSavings / savingsTarget)`.
-- **Cash Flow** = `(startingBalances + actualIncome) - actualExpenses`.
-- **Remaining to Spend** = `plannedEssentials + plannedLifestyle - actualExpenses` (bounded at zero).
-- **Buffer Health** = `bufferAccount.balance / bufferTarget`.
-- **Card Payoff Projection** = `creditAccount.balance - plannedPaydown` (displayed with due date badge).
-
-All formulas surfaced via info icons, with inline “Edit target” buttons linking back to Monthly Plan settings.
+## Simplified Add / Edit Value Experience
+1. **Global Quick-Add FAB** morphs into a segmented sheet with four tabs: Expense, Income, Transfer, Adjustment.
+2. **Smart defaults**:
+   - Recent categories pinned to top as chips with amount ghosts (e.g., `🍽 Food €12.50`).
+   - Amount field auto-selects with numeric keypad and includes `+/-` toggles for rounding to nearest €5.
+   - Account field defaults to most-used per category but exposes a two-column selector (source on left, target on right).
+3. **Inline edit**: tapping any row in the activity table opens an inline row editor—fields slide in-place, confirm/cancel buttons appear in-row, saving reflows instantly with micro success toast.
+4. **Keyboard shortcuts (desktop)**: `E`=Expense, `I`=Income, `T`=Transfer, arrow keys to cycle categories.
+5. **Undo**: after every creation/edit, persistent toast offers undo for 10 seconds.
 
 ---
 
-## Simplified Flow: Input → Insight
-1. **Capture** – User taps `Log Movement`, chooses type, selects category/account, confirms.
-2. **Auto-reconcile** – Movement updates account balances and relevant bucket totals instantly.
-3. **Compute** – Indicators recalculate in background, storing snapshot for dashboard tiles.
-4. **Highlight** – Dashboard surfaces updated insights (e.g., “€180 remaining in Essentials”).
-5. **Recommend** – If thresholds crossed (e.g., lifestyle ratio > plan), a gentle nudge appears with suggestion (“Freeze Shit Money for 3 days?”).
+## Open / Close Month Logic
+### Opening a Month
+1. User taps **`Open Month`** in header.
+2. Modal summarises carry-over balances, suggested targets (auto-calculated), and card funding defaults.
+3. Confirming triggers:
+   - Clone previous month’s categories and planned amounts.
+   - Reset `actual` counters to zero but keep rolling balances (credit, meal, savings, crypto).
+   - Seed recurring outflows (Rent, Savings transfer, Crypto core/shit, Shit Money allocation) dated day 1 as planned movements.
+   - Snapshot of `global totals` to compare later.
 
-A ribbon at top shows progress dots (`Setup → Capture → Review`) to reassure new users.
-
----
-
-## Onboarding & Monthly Review Logic
-- **Onboarding** auto-launches until the first month is activated. Progress saves after each step, so closing the app resumes where left off.
-- **Monthly rollover** triggers when the user taps `Close Month` or when the month changes. Flow: review summary → choose carryover per account → confirm next month’s plan (pre-filled with last targets + adjustments from insights).
-- **Automation**: recurring expenses (Rent, Savings, Crypto, Shit Money) auto-post on day 1 as planned movements; user can edit amounts before confirmation.
-- **Transparency**: summary shows how card top-ups converted into category funding and which balances remain.
-
----
-
-## Behavioral Design & Motivation
-- **Positive reinforcement**: microcopy celebrates actions (“Nicely done! Rent and Savings are locked in for the month.”).
-- **Streaks**: monthly streak tracker for “Closed month on time” and “Stayed within essentials budget”. Visualized as glowing dots under header.
-- **Goal nudges**: if savings completion < 80% midway through month, a gentle reminder suggests rebalancing categories.
-- **Reflection prompts**: closing month asks a single optional question (“What worked well?”) stored locally for journaling context.
-- **Calm alerts**: over-budget states shift card border to amber with guidance, never alarming red unless user is significantly overspent (>120% of plan).
+### Closing a Month
+1. Tapping **`Close Month`** launches a three-step review sheet:
+   - **Step 1 – Summary**: Totals for `Income`, `Expenses`, `Net Saved`, `Remaining to Spend`, plus variance vs previous month.
+   - **Step 2 – Allocation**: Choose handling of leftovers per account (rollover, move to savings, zero out). Amount inputs use sliders with preset suggestions.
+   - **Step 3 – Lock & Archive**: User can add a reflection note; once confirmed, movements are marked immutable and snapshot stored in `MonthlyArchive` collection.
+2. Next month preview pops up immediately with editable targets (see auto-goal logic below).
 
 ---
 
-## Accessibility & Usability Enhancements
-- Minimum 48px touch targets, with generous spacing between primary actions.
-- Full keyboard navigation supported; tooltips accessible via long-press or focus.
-- `prefers-reduced-motion` disables confetti and uses fade transitions.
-- VoiceOver/Screen Reader friendly: each card includes `aria-live="polite"` updates and concise labels (“Essentials 62% of income, €540 spent, €330 remaining”).
-- High-contrast mode toggle shifts surfaces to `#0B0E13` and text to pure white.
+## Financial Summaries
+### Monthly Snapshot (displayed on dashboard)
+- **Income**: planned vs actual, with breakdown of salary, subsidies, extras.
+- **Expenses**: essentials, lifestyle, investing, buffer categories; each has remaining amount metric.
+- **Net Position**: `(Starting balances + Actual income) - Actual expenses`.
+- **Savings Progress**: target vs actual, plus comparison to last month (percent delta).
+- **Card Balances**: credit, meal, savings, crypto shown with gauges and warning thresholds (e.g., credit usage >80%).
+
+### Global Overview (History Drawer footer)
+- Rolling 6/12-month charts for `Total Saved`, `Average Essentials %`, `Lifestyle variance`.
+- Best month badge (“Highest savings: €540 in March”).
+- Export summary button generates JSON with monthly archives.
 
 ---
 
-## Interaction & Motion Examples
-- **Header compression**: scroll down → header scales from 120px to 72px with eased height change and numeric count-up.
-- **Action dock expansion**: tapping FAB morphs into segmented sheet over 240ms spring animation; background dims subtly to focus attention.
-- **Checklist completion**: checkmark animates with 180ms stroke draw and haptic tick (on supported devices).
-- **Trend hover**: desktop hover reveals tooltips sliding upward 12px with slight opacity fade.
-- **Toast feedback**: slides from bottom, persists 2.5s, offers undo for movement deletion.
+## Auto-Calculated Goals & Formulas
+- **Essentials target** = min(`rent + utilities + food target`, `monthly income * essentials_ratio (default 0.55)`).
+- **Lifestyle target** = `monthly income * lifestyle_ratio (default 0.25)` minus any locked essentials spillover.
+- **Investing target** = `monthly income * investing_ratio (default 0.15)` with ability to split between `Crypto Core`, `Crypto Shit`, `Savings`.
+- **Buffer target** = `monthly income * 0.05` until buffer account reaches 3× monthly essentials.
+- **Left to Spend** = `Essentials target + Lifestyle target - actual expense total` (clamped ≥0).
+- **Savings delta** = `actual savings - investing target`.
+- **Risk indicator** thresholds:
+  - Green ≤ 80% of target spent for elapsed-day ratio.
+  - Amber between 80–110%.
+  - Red >110% or credit utilization >90%.
+- All ratios editable in Settings; tooltips show formula references.
 
 ---
 
-## Tone & Microcopy
-- **Voice**: encouraging, concise, never preachy. Example headers: “Savings on pace”, “Buffer holding steady”.
-- **Primary CTA labels**: action-focused (“Log expense”, “Fund my cards”, “Close this month”).
-- **Empty states**: reassure users (“No movements yet—log your first expense to see insights spark to life.”).
-- **Error handling**: empathetic (“Couldn’t save that movement offline? Try again—your data stays safe here.”).
-- **Nudges**: collaborative tone (“Let’s keep Essentials under 60%—pause Lazer spending for two days?”).
+## Behavioral Feedback & Microcopy
+- **Dynamic headline** above hero stats: “Nice! You saved 18% more than last month” (green), “Heads-up: Lifestyle pace +12%” (amber), “You’re over crypto budget by €60” (red).
+- **Celebration moments**: On closing month within 3 days of month-end, confetti pulse and message “Streak +1: Consistent closer.”
+- **Nudges**: If `Left to Spend` drops below €50 mid-month, prompt “Lock your Shit Money?” with one-tap action to reduce category target.
+- Tone stays calm, confident, instructive without jargon.
 
 ---
 
-## Implementation Roadmap & Metrics
-1. Establish design tokens in Tailwind & icon set (Week 1).
-2. Build onboarding wizard, action dock, and responsive dashboard shell (Weeks 2–3).
-3. Implement financial data model updates, indicators snapshot, and transparency panels (Weeks 3–4).
-4. Deliver monthly review experience with streaks and journaling prompt (Week 5).
-5. Ship motion refinements, accessibility QA, and JSON export (Week 6).
+## Visual System
+- **Color palette**:
+  - Background `#0E1117` (charcoal navy).
+  - Surface `#161C24`.
+  - Primary accent `#5C8DFF` for actions.
+  - Success `#60E0B5`, Warning `#FFC05B`, Danger `#FF6C6C`.
+  - Divider lines `rgba(255,255,255,0.06)`.
+- **Typography**: Inter family, weights 600 for headings, 500 for labels, 400 for body. Numerics use tabular feature. Primary size 17px body, 24px for hero stats.
+- **Spacing system**: base 8px scale; vertical rhythm 24px sections. Minimum tap target 52×52px.
+- **Iconography**: Thin 1.5px line icons with filled accent backgrounds for primary actions; category tokens use duotone glyphs.
+- **Motion**: 180ms ease-out for toggles, 220ms spring for sheet expansions, respect `prefers-reduced-motion` by switching to opacity fades.
 
-**Success targets**
-- 90% of users complete onboarding in <5 minutes.
-- Movement logging median time <25 seconds.
-- 30% increase in users closing the month compared to current baseline.
-- User-reported clarity rating ≥4.6/5 during beta interviews.
+---
 
-This proposal blends Steve Jobs-level simplicity with Warren Buffett-style financial rigor, giving users a beautiful, intuitive, and empowering path to mastering their money—entirely offline.
+## Offline & Technical Notes
+- All state stored in IndexedDB with monthly archives in separate object store for fast load.
+- Derived metrics memoized per month to avoid recalculating on every render.
+- Support JSON export/import for manual backups, with checksum to confirm integrity.
+
+---
+
+## Implementation Roadmap
+1. **Component scaffolding**: build dashboard shell (header, hero stats, action dock, insight grid).
+2. **Data orchestration**: introduce monthly archive & snapshot stores, auto-goal engine, and month lifecycle service.
+3. **Quick-add revamp**: implement segmented sheet, recent category memory, inline edits.
+4. **Behavioral layer**: dynamic headlines, nudges, streak tracking.
+5. **Visual polish**: apply palette, spacing, micro-interactions, responsive adjustments.
+
+This blueprint keeps Finance Zen lean yet powerful: every month lives on a single surface, every action is reachable in a tap, and the budgeting brain stays transparent and encouraging.
