@@ -162,6 +162,52 @@ Se estiveres a usar nvm e o terminal continuar a queixar-se de `npm`, garante qu
 
 Quando o Vite arrancar, mostra um endereço `http://localhost:5173/`. Se quiseres abrir no iPhone, certifica-te de que ambos estão na mesma rede e usa o IP local do Mac (ex.: `http://192.168.1.23:5173`).
 
+### 2.1. Correr localmente no Windows (modo desenvolvimento)
+
+> 📦 **Queres automatizar tudo?** Dentro da pasta do projeto corre `powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1`. O assistente instala o Node via `winget` (com fallback para Chocolatey), atualiza o PATH e executa `npm install`, repetindo automaticamente com `--legacy-peer-deps` se for necessário. Se preferires seguir manualmente, usa os passos abaixo.
+
+1. **Instala o Node LTS** pela tua ferramenta favorita:
+   - **winget (recomendado)**
+     ```powershell
+     winget install OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements
+     ```
+   - **Chocolatey**
+     ```powershell
+     choco install nodejs-lts -y --no-progress
+     ```
+   - **nvm-windows**
+     1. Faz download do instalador em <https://github.com/coreybutler/nvm-windows/releases>
+     2. Depois de instalado, corre `nvm install lts` seguido de `nvm use lts`
+
+   > ⚠️ Depois da instalação fecha e volta a abrir o PowerShell (ou corre `refreshenv` no Chocolatey) para que `npm` fique disponível. Confirma com `node -v` e `npm -v`.
+
+2. **Prepara a pasta do projeto**:
+   ```powershell
+   git clone <URL_DO_REPO>
+   cd finance-zen-ios-33136-main
+   ```
+
+3. **Instala as dependências**:
+   ```powershell
+   npm install
+   ```
+   > Se aparecerem erros de *peer dependencies*, repete com `npm install --legacy-peer-deps`.
+
+4. **Arranca o servidor de desenvolvimento**:
+   ```powershell
+   npm run dev
+   ```
+   Vite mostra um endereço `http://localhost:5173/`. Abre-o no navegador do Windows. Para testar no iPhone, certifica-te de que ambos estão na mesma rede e usa o IP local do PC (ex.: `http://192.168.1.45:5173`).
+
+   > Usas Bun? Troca pelos comandos `bun install` e `bun dev`.
+
+5. **Queres validar o build otimizado?**
+   ```powershell
+   npm run build
+   npm run preview
+   ```
+   Isso serve a versão final em `http://localhost:4173/`.
+
 ### 3. Testar o build de produção sem Xcode
 
 1. Gera o bundle final:

@@ -22,6 +22,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-deps.ps1
 
 O assistente tenta instalar o Node LTS via winget (com fallback para Chocolatey), atualiza o PATH da sessão e corre `npm install`. Caso `npm install` falhe por conflitos, ele repete automaticamente com `--legacy-peer-deps`. Se `npm` continuar indisponível mas detetar Bun, termina com `bun install` e indica que deves usar `bun dev` para arrancar o projeto.
 
+> 🎯 **Preferes um passo-a-passo manual?** Vê a nova secção "2.1. Correr localmente no Windows" do [README](../README.md#21-correr-localmente-no-windows-modo-desenvolvimento) para os mesmos comandos explicados um a um.
+
 ## 1. Instalar Node.js (ou Bun)
 
 Escolhe a opção que fizer mais sentido para o teu sistema operativo. Basta uma vez.
