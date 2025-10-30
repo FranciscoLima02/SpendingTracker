@@ -49,11 +49,19 @@ export interface Month {
   incomeMealCard: number;
   incomeCreditCard: number;
   incomeExtraordinary: number;
+  subsidyDistributionSavings?: number;
+  subsidyDistributionCore?: number;
+  subsidyDistributionShit?: number;
+  subsidyDistributionFun?: number;
   fixedExpenses: number;
   foodSeparate: boolean;
   foodPlanned: number;
   subsidyApplied: boolean;
   subsidyAmount: number;
+  actualFixedExpenses?: number;
+  actualFoodExpenses?: number;
+  availableCash?: number;
+  lastInputsUpdatedAt?: Date;
   plannedRent: number;
   plannedUtilities: number;
   plannedFood: number;
@@ -326,11 +334,18 @@ export async function createMonthWithDefaults({
     incomeMealCard,
     incomeCreditCard,
     incomeExtraordinary,
+    subsidyDistributionSavings: settings.distributionSubsidySavings ?? 0,
+    subsidyDistributionCore: settings.distributionSubsidyCore ?? 0,
+    subsidyDistributionShit: settings.distributionSubsidyShit ?? 0,
+    subsidyDistributionFun: settings.distributionSubsidyFun ?? 0,
     fixedExpenses: settings.fixedExpenses ?? 0,
     foodSeparate: settings.foodSeparate ?? false,
     foodPlanned: settings.foodPlanned ?? 0,
     subsidyApplied: false,
     subsidyAmount: settings.subsidyAmount ?? 0,
+    actualFixedExpenses: 0,
+    actualFoodExpenses: 0,
+    availableCash: 0,
     plannedRent: settings.rentPlanned ?? settings.fixedExpenses ?? 0,
     plannedUtilities: settings.utilitiesPlanned ?? 0,
     plannedFood: settings.foodPlannedMonthly ?? settings.foodPlanned ?? 0,

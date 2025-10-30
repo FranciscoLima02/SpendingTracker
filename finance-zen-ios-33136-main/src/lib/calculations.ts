@@ -1,5 +1,5 @@
 // Budget calculation logic updated for extended planning
-import { Month, Movement } from './db';
+import { Month, Movement, Account, AccountBalance } from './db';
 
 export type IncomeCategoryKey =
   | 'incomeSalary'
@@ -66,6 +66,359 @@ function emptyRecord<T extends string>(keys: readonly T[]): Record<T, number> {
 
 export function isSubsidyMonth(month: Month): boolean {
   return month.month === 6 || month.month === 12;
+}
+
+const DEFAULT_DISTRIBUTION = {
+  core: 0.25,
+  shit: 0.1,
+  savings: 0.25,
+  fun: 0.25,
+  buffer: 0.15,
+} as const;
+
+const DEFAULT_SUBSIDY_DISTRIBUTION = {
+  savings: 0.35,
+  core: 0.3,
+  shit: 0.1,
+  fun: 0.25,
+} as const;
+
+const ZERO_TARGETS = {
+  savings: 0,
+  cryptoCore: 0,
+  shitMoney: 0,
+  leisure: 0,
+  buffer: 0,
+};
+
+const ZERO_SUBSIDY_TARGETS = {
+  savings: 0,
+  cryptoCore: 0,
+  shitMoney: 0,
+  leisure: 0,
+};
+
+const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+export interface MonthDistributionTargets {
+  totalIncome: number;
+  incomeBase: number;
+  incomeMealCard: number;
+  incomeExtraordinary: number;
+  incomeSubsidy: number;
+  availableCash: number;
+  baseAvailable: number;
+  baseTargets: typeof ZERO_TARGETS;
+  subsidyTargets: typeof ZERO_SUBSIDY_TARGETS;
+  combinedTargets: typeof ZERO_TARGETS;
+  mealCardBudget: number;
+  subsidyApplied: boolean;
+}
+
+export function calculateMonthDistribution(month: Month): MonthDistributionTargets {
+  const baseDistribution = {
+    core: month.distributionCore ?? DEFAULT_DISTRIBUTION.core,
+    shit: month.distributionShit ?? DEFAULT_DISTRIBUTION.shit,
+    savings: month.distributionSavings ?? DEFAULT_DISTRIBUTION.savings,
+    fun: month.distributionFun ?? DEFAULT_DISTRIBUTION.fun,
+    buffer: month.distributionBuffer ?? DEFAULT_DISTRIBUTION.buffer,
+  };
+
+  const subsidyDistribution = {
+    savings: month.subsidyDistributionSavings ?? DEFAULT_SUBSIDY_DISTRIBUTION.savings,
+    core: month.subsidyDistributionCore ?? DEFAULT_SUBSIDY_DISTRIBUTION.core,
+    shit: month.subsidyDistributionShit ?? DEFAULT_SUBSIDY_DISTRIBUTION.shit,
+    fun: month.subsidyDistributionFun ?? DEFAULT_SUBSIDY_DISTRIBUTION.fun,
+  };
+
+  const incomeBase = month.incomeBase ?? 0;
+  const incomeMealCard = month.incomeMealCard ?? 0;
+  const incomeExtraordinary = month.incomeExtraordinary ?? 0;
+  const subsidyAmount = month.subsidyApplied ? month.subsidyAmount ?? 0 : 0;
+
+  const totalIncome = incomeBase + incomeMealCard + incomeExtraordinary + subsidyAmount;
+
+  const actualFixed = month.actualFixedExpenses ?? month.fixedExpenses ?? 0;
+  const actualFood = month.actualFoodExpenses ?? month.plannedFood ?? month.foodPlanned ?? 0;
+
+  const includesSubsidyInExtra = isSubsidyMonth(month) && subsidyAmount > 0;
+  const baseIncomePool = incomeBase + (includesSubsidyInExtra ? 0 : incomeExtraordinary);
+  const baseAvailable = Math.max(baseIncomePool - (actualFixed + actualFood), 0);
+
+  const baseTargets = {
+    savings: roundCurrency(baseAvailable * baseDistribution.savings),
+    cryptoCore: roundCurrency(baseAvailable * baseDistribution.core),
+    shitMoney: roundCurrency(baseAvailable * baseDistribution.shit),
+    leisure: roundCurrency(baseAvailable * baseDistribution.fun),
+    buffer: roundCurrency(baseAvailable * baseDistribution.buffer),
+  };
+
+  const subsidyTargets = includesSubsidyInExtra
+    ? {
+        savings: roundCurrency(subsidyAmount * subsidyDistribution.savings),
+        cryptoCore: roundCurrency(subsidyAmount * subsidyDistribution.core),
+        shitMoney: roundCurrency(subsidyAmount * subsidyDistribution.shit),
+        leisure: roundCurrency(subsidyAmount * subsidyDistribution.fun),
+      }
+    : { ...ZERO_SUBSIDY_TARGETS };
+
+  const combinedTargets = {
+    savings: roundCurrency(baseTargets.savings + subsidyTargets.savings),
+    cryptoCore: roundCurrency(baseTargets.cryptoCore + subsidyTargets.cryptoCore),
+    shitMoney: roundCurrency(baseTargets.shitMoney + subsidyTargets.shitMoney),
+    leisure: roundCurrency(baseTargets.leisure + subsidyTargets.leisure),
+    buffer: baseTargets.buffer,
+  };
+
+  return {
+    totalIncome: roundCurrency(totalIncome),
+    incomeBase: roundCurrency(incomeBase),
+    incomeMealCard: roundCurrency(incomeMealCard),
+    incomeExtraordinary: includesSubsidyInExtra ? 0 : roundCurrency(incomeExtraordinary),
+    incomeSubsidy: includesSubsidyInExtra ? roundCurrency(subsidyAmount) : 0,
+    availableCash: roundCurrency(baseAvailable + (includesSubsidyInExtra ? subsidyAmount : 0)),
+    baseAvailable: roundCurrency(baseAvailable),
+    baseTargets,
+    subsidyTargets,
+    combinedTargets,
+    mealCardBudget: roundCurrency(incomeMealCard),
+    subsidyApplied: includesSubsidyInExtra,
+  };
+}
+
+export function applyDistributionToMonth(month: Month): Month {
+  const distribution = calculateMonthDistribution(month);
+
+  return {
+    ...month,
+    subsidyApplied: distribution.subsidyApplied,
+    subsidyAmount: distribution.subsidyApplied ? distribution.incomeSubsidy : 0,
+    incomeExtraordinary: distribution.subsidyApplied ? 0 : distribution.incomeExtraordinary,
+    availableCash: distribution.baseAvailable,
+    plannedLeisure: distribution.combinedTargets.leisure,
+    plannedShitMoney: distribution.combinedTargets.shitMoney,
+    plannedSavings: distribution.combinedTargets.savings,
+    plannedBuffer: distribution.combinedTargets.buffer,
+    plannedCryptoCore: distribution.combinedTargets.cryptoCore,
+    plannedCryptoShit: month.plannedCryptoShit ?? 0,
+    lastInputsUpdatedAt: new Date(),
+  };
+}
+
+export interface AccountBucketSnapshot {
+  opening: number;
+  inflow: number;
+  outflow: number;
+  current: number;
+  plan: number;
+  remainingPlan: number;
+}
+
+export interface BudgetBucketSnapshot {
+  plan: number;
+  actual: number;
+  remaining: number;
+}
+
+export interface CryptoBucketSnapshot extends BudgetBucketSnapshot {
+  corePlan: number;
+  shitPlan: number;
+  coreActual: number;
+  shitActual: number;
+}
+
+export interface MonthBucketSummary {
+  account: AccountBucketSnapshot;
+  mealCard: AccountBucketSnapshot & { foodSpent: number };
+  leisure: BudgetBucketSnapshot;
+  shitMoney: BudgetBucketSnapshot;
+  savings: BudgetBucketSnapshot;
+  crypto: CryptoBucketSnapshot;
+  buffer: BudgetBucketSnapshot;
+}
+
+const sumMovements = (movements: Movement[], predicate: (movement: Movement) => boolean) => {
+  return roundCurrency(
+    movements.reduce((total, movement) => {
+      if (predicate(movement)) {
+        return total + movement.amount;
+      }
+      return total;
+    }, 0),
+  );
+};
+
+const getAccountIdByType = (accounts: Account[], type: Account['type']) =>
+  accounts.find((account) => account.type === type)?.id;
+
+const getBalanceForAccount = (
+  balances: AccountBalance[],
+  accountId?: string,
+): AccountBalance | undefined => balances.find((balance) => balance.accountId === accountId);
+
+export function buildMonthBuckets(
+  month: Month,
+  movements: Movement[],
+  accounts: Account[],
+  balances: AccountBalance[],
+): MonthBucketSummary {
+  const distribution = calculateMonthDistribution(month);
+  const expenses = calculateActualExpenses(movements);
+  const transfers = calculateActualTransfers(movements);
+
+  const currentAccountId = getAccountIdByType(accounts, 'current');
+  const mealCardAccountId = getAccountIdByType(accounts, 'mealCard');
+
+  const accountOutflow = (accountId?: string) =>
+    accountId
+      ? sumMovements(
+          movements,
+          (movement) =>
+            movement.accountFromId === accountId && (movement.type === 'expense' || movement.type === 'transfer'),
+        )
+      : 0;
+
+  const accountInflow = (accountId?: string) =>
+    accountId
+      ? sumMovements(
+          movements,
+          (movement) =>
+            movement.accountToId === accountId && (movement.type === 'income' || movement.type === 'transfer'),
+        )
+      : 0;
+
+  const buildAccountBucket = (accountId: string | undefined, plan: number): AccountBucketSnapshot => {
+    const balance = getBalanceForAccount(balances, accountId);
+    const opening = balance?.openingBalance ?? 0;
+    const inflow = accountInflow(accountId);
+    const outflow = accountOutflow(accountId);
+    const current = roundCurrency(opening + inflow - outflow);
+    const remainingPlan = roundCurrency(plan - outflow);
+
+    return {
+      opening: roundCurrency(opening),
+      inflow,
+      outflow,
+      current,
+      plan: roundCurrency(plan),
+      remainingPlan,
+    };
+  };
+
+  const accountBucket = buildAccountBucket(currentAccountId, distribution.availableCash);
+  const mealCardBucket = {
+    ...buildAccountBucket(mealCardAccountId, distribution.mealCardBudget),
+    foodSpent: accountOutflow(mealCardAccountId),
+  };
+
+  const savingsPlan = distribution.combinedTargets.savings;
+  const savingsActual = transfers.transferenciaPoupanca ?? 0;
+  const shitMoneyPlan = distribution.combinedTargets.shitMoney;
+  const shitMoneyActual = expenses.shitMoney ?? 0;
+  const leisurePlan = distribution.combinedTargets.leisure;
+  const leisureActual = expenses.leisure ?? 0;
+  const bufferPlan = distribution.combinedTargets.buffer;
+  const bufferActual = transfers.buffer ?? 0;
+  const cryptoCorePlan = distribution.combinedTargets.cryptoCore;
+  const cryptoShitPlan = month.plannedCryptoShit ?? 0;
+  const cryptoActualCore = transfers.compraCryptoCore ?? 0;
+  const cryptoActualShit = transfers.compraCryptoShit ?? 0;
+
+  const buildBudgetBucket = (plan: number, actual: number): BudgetBucketSnapshot => ({
+    plan: roundCurrency(plan),
+    actual: roundCurrency(actual),
+    remaining: roundCurrency(plan - actual),
+  });
+
+  return {
+    account: accountBucket,
+    mealCard: mealCardBucket,
+    leisure: buildBudgetBucket(leisurePlan, leisureActual),
+    shitMoney: buildBudgetBucket(shitMoneyPlan, shitMoneyActual),
+    savings: buildBudgetBucket(savingsPlan, savingsActual),
+    buffer: buildBudgetBucket(bufferPlan, bufferActual),
+    crypto: {
+      plan: roundCurrency(cryptoCorePlan + cryptoShitPlan),
+      actual: roundCurrency(cryptoActualCore + cryptoActualShit),
+      remaining: roundCurrency(cryptoCorePlan + cryptoShitPlan - (cryptoActualCore + cryptoActualShit)),
+      corePlan: roundCurrency(cryptoCorePlan),
+      shitPlan: roundCurrency(cryptoShitPlan),
+      coreActual: roundCurrency(cryptoActualCore),
+      shitActual: roundCurrency(cryptoActualShit),
+    },
+  };
+}
+
+export type SuggestionTone = 'info' | 'warning' | 'success';
+
+export interface SavingsSuggestion {
+  id: string;
+  tone: SuggestionTone;
+  message: string;
+}
+
+const daysInMonth = (year: number, month: number) => new Date(year, month, 0).getDate();
+
+export function generateSavingsSuggestions(
+  month: Month,
+  buckets: MonthBucketSummary,
+  now: Date = new Date(),
+): SavingsSuggestion[] {
+  const suggestions: SavingsSuggestion[] = [];
+
+  const totalDays = daysInMonth(month.year, month.month);
+  const halfwayPoint = Math.floor(totalDays / 2);
+  const currentDay = month.year === now.getFullYear() && month.month === now.getMonth() + 1 ? now.getDate() : totalDays;
+
+  const leisurePlan = buckets.leisure.plan;
+  if (leisurePlan > 0) {
+    const leisureUsage = buckets.leisure.actual / leisurePlan;
+    if (leisureUsage >= 0.8 && currentDay <= halfwayPoint) {
+      suggestions.push({
+        id: 'leisure-brake',
+        tone: 'warning',
+        message: 'Abranda no lazer esta semana para manteres o plano do mês.',
+      });
+    }
+  }
+
+  if (currentDay >= 20 && buckets.savings.plan > 0) {
+    const savingsProgress = buckets.savings.actual / buckets.savings.plan;
+    if (savingsProgress < 0.5) {
+      const missing = Math.max(buckets.savings.plan * 0.5 - buckets.savings.actual, 0);
+      suggestions.push({
+        id: 'savings-transfer',
+        tone: 'warning',
+        message: `Faz transferência de ${formatCurrency(roundCurrency(missing))} para a poupança hoje.`,
+      });
+    }
+  }
+
+  if (buckets.mealCard.remainingPlan <= 0 && currentDay < totalDays) {
+    suggestions.push({
+      id: 'meal-card-empty',
+      tone: 'warning',
+      message: 'O cartão refeição já foi todo. Usa saldo da conta e reduz lazer para compensar.',
+    });
+  }
+
+  if (buckets.shitMoney.actual >= buckets.shitMoney.plan && buckets.shitMoney.plan > 0) {
+    suggestions.push({
+      id: 'risky-budget-done',
+      tone: 'info',
+      message: 'Já cumpriste a parte de risco deste mês. Evita novos gastos em shit money.',
+    });
+  }
+
+  if (suggestions.length === 0) {
+    suggestions.push({
+      id: 'on-track',
+      tone: 'success',
+      message: 'Ótimo! O plano está alinhado com o mês. Continua assim.',
+    });
+  }
+
+  return suggestions;
 }
 
 export function calculatePlannedIncome(month: Month): Record<IncomeCategoryKey, number> {

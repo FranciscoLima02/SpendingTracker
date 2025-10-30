@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dashboard } from "@/components/Dashboard";
 import { MovementDialog } from "@/components/MovementDialog";
 import { CardFundingDialog } from "@/components/CardFundingDialog";
@@ -29,6 +29,10 @@ import {
   calculateFixedVsVariable,
   calculateCashFlow,
   sumRecord,
+  applyDistributionToMonth,
+  calculateMonthDistribution,
+  buildMonthBuckets,
+  generateSavingsSuggestions,
 } from "@/lib/calculations";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -132,6 +136,12 @@ const Index = () => {
         });
       }
 
+      if (monthData && typeof monthData.availableCash === 'undefined') {
+        const recalculated = applyDistributionToMonth(monthData);
+        await db.put('months', recalculated);
+        monthData = recalculated;
+      }
+
       const hydratedMonth = normalizeMonthData(monthData);
       setCurrentMonth(hydratedMonth);
 
@@ -181,15 +191,6 @@ const Index = () => {
   const fixedVsVariable = calculateFixedVsVariable(movements);
   const cashFlow = calculateCashFlow(currentMonth, movements);
 
-  const dashboardBalances = accounts.map(account => {
-    const balance = balances.find(b => b.accountId === account.id);
-    return {
-      name: account.name,
-      balance: balance?.manualCurrentBalance || 0,
-      type: account.type,
-    };
-  });
-
   const summary = {
     openingBalance: (currentMonth.incomeMealCard ?? 0) + (currentMonth.incomeCreditCard ?? 0),
     plannedIncomeTotal: calculatePlannedIncomeTotal(currentMonth),
@@ -208,6 +209,16 @@ const Index = () => {
     fixedExpenses: fixedVsVariable.fixed,
     variableExpenses: fixedVsVariable.variable,
   };
+
+  const distribution = useMemo(() => calculateMonthDistribution(currentMonth), [currentMonth]);
+  const bucketSummary = useMemo(
+    () => buildMonthBuckets(currentMonth, movements, accounts, balances),
+    [currentMonth, movements, accounts, balances],
+  );
+  const suggestions = useMemo(
+    () => generateSavingsSuggestions(currentMonth, bucketSummary),
+    [currentMonth, bucketSummary],
+  );
 
   async function handleSaveMovement(movement: Partial<Movement>) {
     try {
@@ -407,13 +418,6 @@ const Index = () => {
       <Dashboard
         monthName={monthName}
         summary={summary}
-        incomePlan={plannedIncome}
-        incomeActual={actualIncome}
-        expensePlan={plannedExpenses}
-        expenseActual={actualExpenses}
-        transferPlan={plannedTransfers}
-        transferActual={actualTransfers}
-        balances={dashboardBalances}
         isClosed={currentMonth.isClosed}
         onAddIncome={() => {
           setMovementDialogType('income');
@@ -429,6 +433,9 @@ const Index = () => {
         }}
         onManageCardFunding={() => setCardFundingDialogOpen(true)}
         onCloseMonth={handleCloseMonth}
+        distribution={distribution}
+        bucketSummary={bucketSummary}
+        suggestions={suggestions}
       />
       
       <MovementDialog

@@ -1,17 +1,8 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, TrendingDown, Wallet, PiggyBank } from "lucide-react";
-import {
-  IncomeCategoryKey,
-  ExpenseCategoryKey,
-  TransferCategoryKey,
-  INCOME_CATEGORY_LABELS,
-  EXPENSE_CATEGORY_LABELS,
-  TRANSFER_CATEGORY_LABELS,
-  formatCurrency,
-} from "@/lib/calculations";
-import { Account } from "@/lib/db";
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, CreditCard, Target } from "lucide-react";
+import { formatCurrency, MonthDistributionTargets, MonthBucketSummary, SavingsSuggestion } from "@/lib/calculations";
 
 interface SummaryMetrics {
   openingBalance: number;
@@ -35,96 +26,40 @@ interface SummaryMetrics {
 interface DashboardProps {
   monthName: string;
   summary: SummaryMetrics;
-  incomePlan: Record<IncomeCategoryKey, number>;
-  incomeActual: Record<IncomeCategoryKey, number>;
-  expensePlan: Record<ExpenseCategoryKey, number>;
-  expenseActual: Record<ExpenseCategoryKey, number>;
-  transferPlan: Record<TransferCategoryKey, number>;
-  transferActual: Record<TransferCategoryKey, number>;
-  balances: Array<{ name: string; balance: number; type: Account["type"] }>;
   isClosed: boolean;
   onAddIncome: () => void;
   onAddExpense: () => void;
   onAddTransfer: () => void;
   onManageCardFunding: () => void;
   onCloseMonth: () => void;
-}
-
-function CategoryTable<
-  Key extends string,
-  Labels extends Record<Key, string>
->({
-  labels,
-  planned,
-  actual,
-  highlightNegative = false,
-}: {
-  labels: Labels;
-  planned: Record<Key, number>;
-  actual: Record<Key, number>;
-  highlightNegative?: boolean;
-}) {
-  return (
-    <div className="space-y-3">
-      {Object.entries(labels).map(([key, label]) => {
-        const plannedValue = planned[key as Key] ?? 0;
-        const actualValue = actual[key as Key] ?? 0;
-        const progress = plannedValue > 0 ? Math.min((actualValue / plannedValue) * 100, 150) : 0;
-        const diff = actualValue - plannedValue;
-        const diffLabel = `${diff >= 0 ? "+" : ""}${formatCurrency(diff)}`;
-        const isNegative = highlightNegative && diff > 0;
-
-        return (
-          <div key={key} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-foreground">{label}</p>
-                <p className="text-xs text-muted-foreground">
-                  Planeado: {formatCurrency(plannedValue)}
-                </p>
-              </div>
-              <div className={`text-sm font-semibold ${isNegative ? "text-destructive" : "text-foreground"}`}>
-                {formatCurrency(actualValue)}
-              </div>
-            </div>
-            <Progress value={progress} className="h-2" />
-            <div className="flex justify-between text-xs">
-              <span className={isNegative ? "text-destructive font-medium" : "text-muted-foreground"}>
-                Diferença: {diffLabel}
-              </span>
-              {plannedValue === 0 && actualValue === 0 ? (
-                <span className="text-muted-foreground">Sem movimentos</span>
-              ) : (
-                <span className="text-muted-foreground">
-                  {progress.toFixed(0)}%
-                </span>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+  distribution: MonthDistributionTargets;
+  bucketSummary: MonthBucketSummary;
+  suggestions: SavingsSuggestion[];
 }
 
 export function Dashboard({
   monthName,
   summary,
-  incomePlan,
-  incomeActual,
-  expensePlan,
-  expenseActual,
-  transferPlan,
-  transferActual,
-  balances,
   isClosed,
   onAddIncome,
   onAddExpense,
   onAddTransfer,
   onManageCardFunding,
   onCloseMonth,
+  distribution,
+  bucketSummary,
+  suggestions,
 }: DashboardProps) {
   const cashFlowIsPositive = summary.cashFlow >= 0;
+
+  const accountInitial = bucketSummary.account.opening + bucketSummary.account.inflow;
+  const mealCardInitial = bucketSummary.mealCard.opening + bucketSummary.mealCard.inflow;
+
+  const suggestionToneStyles: Record<SavingsSuggestion["tone"], string> = {
+    info: 'bg-accent/10 border-accent/20 text-accent-foreground',
+    warning: 'bg-warning/10 border-warning/20 text-warning',
+    success: 'bg-success/10 border-success/20 text-success',
+  };
 
   return (
     <div className="min-h-screen bg-background p-4 pb-24">
@@ -186,108 +121,151 @@ export function Dashboard({
         </Card>
 
         <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4 text-foreground">Indicadores automáticos</h2>
+          <h2 className="text-lg font-semibold mb-4 text-foreground">Conta &amp; Cartão refeição</h2>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <PiggyBank className="w-5 h-5 text-success" />
-                  <p className="text-sm font-medium text-foreground">Poupança vs meta</p>
+            <div className="space-y-3 rounded-lg border p-4 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Conta bancária</p>
+                  <p className="text-lg font-semibold text-foreground">{formatCurrency(bucketSummary.account.plan)}</p>
                 </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-success">
-                    {formatCurrency(summary.savingsActual)}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    / {formatCurrency(summary.savingsPlanned)}
-                  </span>
+                <Wallet className="w-5 h-5 text-primary" />
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Saldo inicial</p>
+                  <p className="font-semibold text-foreground">{formatCurrency(accountInitial)}</p>
                 </div>
-                <Progress value={Math.min(summary.savingsProgress, 150)} className="h-2 mt-3" />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {summary.savingsProgress.toFixed(0)}% da meta atingida
+                <div>
+                  <p className="text-xs text-muted-foreground">Gasto</p>
+                  <p className="font-semibold text-destructive">{formatCurrency(bucketSummary.account.outflow)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Saldo atual</p>
+                  <p className="font-semibold text-foreground">{formatCurrency(bucketSummary.account.current)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Falta gastar</p>
+                  <p className={`font-semibold ${bucketSummary.account.remainingPlan < 0 ? 'text-destructive' : 'text-success'}`}>
+                    {formatCurrency(bucketSummary.account.remainingPlan)}
+                  </p>
+                </div>
+              </div>
+              <Progress
+                value={bucketSummary.account.plan > 0 ? Math.min((bucketSummary.account.outflow / bucketSummary.account.plan) * 100, 180) : 0}
+                className="h-2"
+              />
+            </div>
+            <div className="space-y-3 rounded-lg border p-4 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Cartão refeição</p>
+                  <p className="text-lg font-semibold text-foreground">{formatCurrency(distribution.mealCardBudget)}</p>
+                </div>
+                <CreditCard className="w-5 h-5 text-accent" />
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Saldo inicial</p>
+                  <p className="font-semibold text-foreground">{formatCurrency(mealCardInitial)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Gasto em comida</p>
+                  <p className="font-semibold text-destructive">{formatCurrency(bucketSummary.mealCard.foodSpent)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Saldo atual</p>
+                  <p className="font-semibold text-foreground">{formatCurrency(bucketSummary.mealCard.current)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Disponível</p>
+                  <p className={`font-semibold ${bucketSummary.mealCard.remainingPlan < 0 ? 'text-destructive' : 'text-success'}`}>
+                    {formatCurrency(bucketSummary.mealCard.remainingPlan)}
+                  </p>
+                </div>
+              </div>
+              <Progress
+                value={distribution.mealCardBudget > 0 ? Math.min((bucketSummary.mealCard.foodSpent / distribution.mealCardBudget) * 100, 180) : 0}
+                className="h-2"
+              />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-foreground">Bolsas planeadas</h2>
+            <Target className="w-5 h-5 text-primary" />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[{
+              label: 'Poupança',
+              icon: <PiggyBank className="w-5 h-5 text-success" />,
+              bucket: bucketSummary.savings,
+            }, {
+              label: 'Lazer',
+              icon: <TrendingUp className="w-5 h-5 text-accent" />,
+              bucket: bucketSummary.leisure,
+            }, {
+              label: 'Shit Money',
+              icon: <TrendingDown className="w-5 h-5 text-destructive" />,
+              bucket: bucketSummary.shitMoney,
+            }, {
+              label: 'Buffer / Conta',
+              icon: <Wallet className="w-5 h-5 text-primary" />,
+              bucket: bucketSummary.buffer,
+            }].map(({ label, icon, bucket }) => {
+              const progress = bucket.plan > 0 ? Math.min((bucket.actual / bucket.plan) * 100, 180) : 0;
+              const remainingClass = bucket.remaining < 0 ? 'text-destructive' : 'text-muted-foreground';
+              return (
+                <div key={label} className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+                      <p className="text-lg font-semibold text-foreground">{formatCurrency(bucket.plan)}</p>
+                    </div>
+                    {icon}
+                  </div>
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Executado: {formatCurrency(bucket.actual)}</span>
+                    <span className={remainingClass}>Falta: {formatCurrency(bucket.remaining)}</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                </div>
+              );
+            })}
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Crypto (Core + Shit)</p>
+                  <p className="text-lg font-semibold text-foreground">{formatCurrency(bucketSummary.crypto.plan)}</p>
+                </div>
+                <TrendingUp className="w-5 h-5 text-warning" />
+              </div>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>Core: {formatCurrency(bucketSummary.crypto.coreActual)} / {formatCurrency(bucketSummary.crypto.corePlan)}</p>
+                <p>Shit: {formatCurrency(bucketSummary.crypto.shitActual)} / {formatCurrency(bucketSummary.crypto.shitPlan)}</p>
+                <p className={bucketSummary.crypto.remaining < 0 ? 'text-destructive font-semibold' : ''}>
+                  Falta investir: {formatCurrency(bucketSummary.crypto.remaining)}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-muted bg-muted/40 p-3">
-                  <p className="text-xs text-muted-foreground">Despesas fixas</p>
-                  <p className="font-semibold text-foreground">
-                    {formatCurrency(summary.fixedExpenses)}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-muted bg-muted/40 p-3">
-                  <p className="text-xs text-muted-foreground">Despesas variáveis</p>
-                  <p className="font-semibold text-foreground">
-                    {formatCurrency(summary.variableExpenses)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground">
-                <TrendingDown className="w-5 h-5 text-primary" />
-                <p className="text-sm font-medium">% gasto em essenciais</p>
-              </div>
-              <div className="rounded-lg border border-primary/10 bg-primary/5 p-3">
-                <p className="text-2xl font-bold text-primary">{summary.essentialShare.toFixed(1)}%</p>
-                <p className="text-xs text-muted-foreground">Renda + contas + comida</p>
-              </div>
-              <div className="rounded-lg border border-accent/10 bg-accent/5 p-3">
-                <p className="text-sm font-medium text-accent">Lazer &amp; Shit Money</p>
-                <p className="text-lg font-bold text-accent">{summary.funShare.toFixed(1)}%</p>
-              </div>
-              <div className="rounded-lg border border-warning/10 bg-warning/5 p-3">
-                <p className="text-sm font-medium text-warning">Crypto</p>
-                <p className="text-lg font-bold text-warning">{summary.cryptoShare.toFixed(1)}%</p>
-              </div>
+              <Progress
+                value={bucketSummary.crypto.plan > 0 ? Math.min((bucketSummary.crypto.actual / bucketSummary.crypto.plan) * 100, 180) : 0}
+                className="h-2"
+              />
             </div>
           </div>
         </Card>
 
         <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">Entradas</h2>
-            <TrendingUp className="w-5 h-5 text-success" />
-          </div>
-          <CategoryTable
-            labels={INCOME_CATEGORY_LABELS}
-            planned={incomePlan}
-            actual={incomeActual}
-          />
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">Despesas essenciais e variáveis</h2>
-            <TrendingDown className="w-5 h-5 text-destructive" />
-          </div>
-          <CategoryTable
-            labels={EXPENSE_CATEGORY_LABELS}
-            planned={expensePlan}
-            actual={expenseActual}
-            highlightNegative
-          />
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">Investimentos &amp; Buffer</h2>
-            <Wallet className="w-5 h-5 text-warning" />
-          </div>
-          <CategoryTable
-            labels={TRANSFER_CATEGORY_LABELS}
-            planned={transferPlan}
-            actual={transferActual}
-            highlightNegative
-          />
-        </Card>
-
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4 text-foreground">Saldos por conta</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {balances.map((account) => (
-              <div key={account.name} className="rounded-lg bg-muted/40 p-3 text-center">
-                <p className="text-xs text-muted-foreground mb-1">{account.name}</p>
-                <p className="text-sm font-bold text-foreground">{formatCurrency(account.balance)}</p>
+          <h2 className="text-lg font-semibold mb-4 text-foreground">Sugestões de poupança deste mês</h2>
+          <div className="space-y-3">
+            {suggestions.map((suggestion) => (
+              <div
+                key={suggestion.id}
+                className={`rounded-lg border p-4 text-sm ${suggestionToneStyles[suggestion.tone]}`}
+              >
+                {suggestion.message}
               </div>
             ))}
           </div>
