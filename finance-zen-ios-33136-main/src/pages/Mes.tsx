@@ -17,6 +17,7 @@ import {
   Plus,
   CreditCard,
   MoreVertical,
+  Loader2,
 } from "lucide-react";
 import {
   getDB,
@@ -129,6 +130,8 @@ export default function Mes() {
       buffer: 0,
     },
   });
+  const [movementActionId, setMovementActionId] = useState<string | null>(null);
+  const [isDeletingMovement, setIsDeletingMovement] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -651,6 +654,55 @@ export default function Mes() {
         description: 'Tenta novamente dentro de instantes.',
         variant: 'destructive',
       });
+    }
+  }
+
+  async function handleDeleteMovement(movementId: string) {
+    if (!month) return;
+    if (month.isClosed) {
+      toast({
+        title: 'Mês fechado',
+        description: 'Reabre o mês para poderes remover movimentos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const target = movements.find((movement) => movement.id === movementId);
+    if (!target) return;
+
+    const confirmDelete = window.confirm('Queres mesmo apagar este movimento? Esta ação é irreversível.');
+    if (!confirmDelete) return;
+
+    setMovementActionId(movementId);
+    setIsDeletingMovement(true);
+
+    try {
+      const db = await getDB();
+      await db.delete('movements', movementId);
+      const monthKey: [number, number] = [month.year, month.month];
+      const [refreshedMovements, refreshedBalances] = await Promise.all([
+        db.getAllFromIndex('movements', 'by-month', monthKey),
+        db.getAllFromIndex('balances', 'by-month', monthKey),
+      ]);
+
+      setMovements(refreshedMovements);
+      setBalances(refreshedBalances);
+
+      toast({
+        title: 'Movimento apagado',
+        description: 'Removemos o registo e atualizámos os totais do mês.',
+      });
+    } catch (error) {
+      console.error('Falha ao apagar movimento', error);
+      toast({
+        title: 'Erro ao apagar movimento',
+        description: 'Não foi possível remover este registo. Tenta novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setMovementActionId(null);
+      setIsDeletingMovement(false);
     }
   }
 
@@ -1675,13 +1727,31 @@ export default function Mes() {
                           )}
                         </div>
                       </div>
-                      <div
-                        className={`text-sm font-semibold ${
-                          movement.type === 'income' ? 'text-success' : 'text-foreground'
-                        }`}
-                      >
-                        {movement.type === 'income' ? '+' : '-'}
-                        {formatCurrency(movement.amount)}
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`text-sm font-semibold ${
+                            movement.type === 'income' ? 'text-success' : 'text-foreground'
+                          }`}
+                        >
+                          {movement.type === 'income' ? '+' : '-'}
+                          {formatCurrency(movement.amount)}
+                        </div>
+                        {!isLocked && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteMovement(movement.id)}
+                            disabled={isDeletingMovement && movementActionId === movement.id}
+                          >
+                            {isDeletingMovement && movementActionId === movement.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
